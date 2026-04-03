@@ -1,0 +1,42 @@
+{
+  "uom_master": [
+    {"id":1,"name":"Gram",      "short_code":"g"},
+    {"id":2,"name":"Kilogram",  "short_code":"kg"},
+    {"id":3,"name":"Milliliter","short_code":"ml"},
+    {"id":4,"name":"Liter",     "short_code":"L"},
+    {"id":5,"name":"Piece",     "short_code":"pcs"},
+    {"id":6,"name":"Packet",    "short_code":"pkt"},
+    {"id":7,"name":"Box",       "short_code":"box"}
+  ],
+  "category_master": [
+    {"id":1,"name":"Jaggery Blocks","icon":"🟤","bg_color":"#FFF8E8","sort_order":1},
+    {"id":2,"name":"Jaggery Powder","icon":"🫙","bg_color":"#FFF3D0","sort_order":2},
+    {"id":3,"name":"Palm Candy",    "icon":"💎","bg_color":"#F0FFF0","sort_order":3},
+    {"id":4,"name":"Palm Sugar",    "icon":"🌟","bg_color":"#FFF8E8","sort_order":4},
+    {"id":5,"name":"Combo Packs",   "icon":"🎁","bg_color":"#FFF0F5","sort_order":5},
+    {"id":6,"name":"Bulk Packs",    "icon":"📦","bg_color":"#F5F0FF","sort_order":6}
+  ],
+  "products": [
+    {"id":1,"name":"Palm Jaggery Block",   "selling_price":180,"mrp":220,"quantity":500, "uom_id":1,"category_id":1,"stock_units":142,"badge_label":"Bestseller","is_bestseller":true, "rating":4.9,"review_count":384,"total_sold":384},
+    {"id":2,"name":"Palm Jaggery Powder",  "selling_price":220,"mrp":260,"quantity":500, "uom_id":1,"category_id":2,"stock_units":88, "badge_label":"Popular",    "is_bestseller":false,"rating":4.8,"review_count":219,"total_sold":219},
+    {"id":3,"name":"Palm Candy (Kalkandu)","selling_price":240,"mrp":280,"quantity":250, "uom_id":1,"category_id":3,"stock_units":12, "badge_label":"Traditional","is_bestseller":false,"rating":4.9,"review_count":156,"total_sold":156},
+    {"id":4,"name":"Palm Sugar Granules",  "selling_price":320,"mrp":380,"quantity":400, "uom_id":1,"category_id":4,"stock_units":6,  "badge_label":"Healthy",    "is_bestseller":false,"rating":4.7,"review_count":98, "total_sold":98},
+    {"id":5,"name":"Family Combo Pack",    "selling_price":580,"mrp":760,"quantity":1750,"uom_id":1,"category_id":5,"stock_units":34, "badge_label":"Best Value", "is_bestseller":true, "rating":5.0,"review_count":67, "total_sold":67},
+    {"id":6,"name":"Bulk Jaggery Block 2kg","selling_price":320,"mrp":400,"quantity":2000,"uom_id":1,"category_id":6,"stock_units":67,"badge_label":"Bulk Pack",  "is_bestseller":false,"rating":4.8,"review_count":143,"total_sold":143}
+  ],
+  "users": [
+    {"id":1,"first_name":"Arjun", "last_name":"Kumar",    "email":"admin@palmlegacy.com",   "mobile":"9000000001","role":"admin",    "plain_pwd":"admin123"},
+    {"id":2,"first_name":"Priya", "last_name":"Sharma",   "email":"manager@palmlegacy.com", "mobile":"9000000002","role":"manager",  "plain_pwd":"manager123"},
+    {"id":3,"first_name":"Ravi",  "last_name":"Natarajan","email":"viewer@palmlegacy.com",  "mobile":"9000000003","role":"viewer",   "plain_pwd":"viewer123"}
+  ],
+  "suppliers": [
+    {"id":1,"name":"Palmyra Farms Co.",   "mobile":"9800001111","email":"palmyra@farms.com",   "gstin":"33AAAAA0000A1Z5","city":"Madurai",    "state":"Tamil Nadu","credit_days":30},
+    {"id":2,"name":"Natural Jaggery Ltd", "mobile":"9800002222","email":"natural@jaggery.com", "gstin":"33BBBBB0000B1Z5","city":"Tirunelveli","state":"Tamil Nadu","credit_days":30},
+    {"id":3,"name":"Tamil Palm Corp",     "mobile":"9800003333","email":"info@tamilpalm.com",  "gstin":"33CCCCC0000C1Z5","city":"Salem",       "state":"Tamil Nadu","credit_days":45}
+  ],
+  "pricing_policies": [
+    {"type":"offer", "name":"Weekend Special",    "discount_type":"percent","percent":15,"cap_amount":100,"scope":"all","valid_from":"2026-03-01","valid_to":"2026-03-31","is_active":true},
+    {"type":"promo", "name":"Welcome Offer",       "code":"WELCOME10","discount_type":"percent","percent":10,"cap_amount":50, "scope":"all","valid_from":"2026-01-01","valid_to":"2026-12-31","total_uses":500,"per_user_limit":1,"is_active":true},
+    {"type":"promo", "name":"Min ₹500 Discount",   "code":"SAVE12",   "discount_type":"percent","percent":12,"cap_amount":80, "scope":"min_order","min_order_amt":500,"valid_from":"2026-03-01","valid_to":"2026-06-30","is_active":true}
+  ]
+}

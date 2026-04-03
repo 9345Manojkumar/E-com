@@ -1,0 +1,4 @@
+node_modules/
+.env
+*.log
+palm-legacy.code-workspace

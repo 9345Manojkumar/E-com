@@ -1,0 +1,146 @@
+-- ============================================================
+--  PALM LEGACY — Schema Fix  v3.2
+--  Run once after importing schema.sql:
+--    mysql -u root -p palm_legacy < db/fix_schema.sql
+--
+--  Safe to re-run — all ALTER TABLE use IF NOT EXISTS / IF EXISTS,
+--  and CREATE TABLE uses IF NOT EXISTS.
+-- ============================================================
+USE palm_legacy;
+
+-- ── FIX 1: products table ─────────────────────────────────────────────────
+-- Original schema used: selling_price, stock_units, quantity
+-- Server expects:       price, stock, weight_grams
+ALTER TABLE products
+  CHANGE COLUMN selling_price price        DECIMAL(10,2) NOT NULL DEFAULT 0,
+  CHANGE COLUMN stock_units   stock        INT           NOT NULL DEFAULT 0,
+  CHANGE COLUMN quantity      weight_grams DECIMAL(10,3) NOT NULL DEFAULT 0;
+
+ALTER TABLE products
+  ADD COLUMN IF NOT EXISTS tags VARCHAR(200) DEFAULT '';
+
+SELECT 'FIX 1 — products columns ✅' AS status;
+
+-- ── FIX 2: orders — add created_at ───────────────────────────────────────
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+
+UPDATE orders SET created_at = ordered_at WHERE created_at IS NULL;
+
+SELECT 'FIX 2 — orders.created_at ✅' AS status;
+
+-- ── FIX 3: orders — Razorpay columns ─────────────────────────────────────
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS razorpay_payment_id VARCHAR(100) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS razorpay_order_id   VARCHAR(100) DEFAULT NULL;
+
+SELECT 'FIX 3 — orders razorpay columns ✅' AS status;
+
+-- ── FIX 4: hero_banners table ─────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS hero_banners (
+  id          INT          NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  image_url   MEDIUMTEXT   NOT NULL,
+  tag         VARCHAR(100) DEFAULT '',
+  title       VARCHAR(200) DEFAULT '',
+  description TEXT         DEFAULT NULL,
+  btn_text    VARCHAR(100) DEFAULT '',
+  btn_url     VARCHAR(300) DEFAULT NULL,
+  sort_order  INT          DEFAULT 0,
+  is_active   TINYINT(1)   DEFAULT 1,
+  created_by  INT          DEFAULT NULL,
+  created_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+  updated_at  TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+SELECT 'FIX 4 — hero_banners table ✅' AS status;
+
+-- ── FIX 5: v_order_summary view — include created_at & user_id ───────────
+DROP VIEW IF EXISTS v_order_summary;
+CREATE VIEW v_order_summary AS
+SELECT
+  o.id, o.user_id, o.order_number, o.customer_name,
+  o.customer_mobile, o.customer_email, o.grand_total,
+  o.payment_method, o.payment_status, o.order_status,
+  o.ordered_at, o.created_at, o.city, o.state, o.pincode,
+  COUNT(oi.id) AS item_count,
+  GROUP_CONCAT(oi.product_name ORDER BY oi.id SEPARATOR ', ') AS items
+FROM orders o
+LEFT JOIN order_items oi ON oi.order_id = o.id
+GROUP BY o.id;
+
+SELECT 'FIX 5 — v_order_summary view ✅' AS status;
+
+-- ── FIX 6: orders — expand payment_method to VARCHAR ─────────────────────
+-- Original ENUM('upi','card','cod') was too restrictive for dynamic values
+ALTER TABLE orders
+  MODIFY COLUMN payment_method VARCHAR(30) NOT NULL DEFAULT 'cod';
+
+SELECT 'FIX 6 — orders.payment_method expanded ✅' AS status;
+
+-- ── FIX 7: picklist tables ────────────────────────────────────────────────
+-- picklists holds the auto-increment sequence (PALM_000000001, etc.)
+CREATE TABLE IF NOT EXISTS picklists (
+  id          INT         NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  picklist_no VARCHAR(20) NOT NULL UNIQUE,
+  created_by  INT,
+  created_at  TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+);
+
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS picklist_no VARCHAR(20) DEFAULT NULL;
+
+-- Add index only if it doesn't already exist
+SET @idx_exists = (
+  SELECT COUNT(*) FROM information_schema.statistics
+  WHERE table_schema = DATABASE()
+    AND table_name   = 'orders'
+    AND index_name   = 'idx_picklist_no'
+);
+SET @sql = IF(@idx_exists = 0,
+  'ALTER TABLE orders ADD INDEX idx_picklist_no (picklist_no)',
+  'SELECT ''idx_picklist_no already exists'' AS note'
+);
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT 'FIX 7 — picklists table + orders.picklist_no ✅' AS status;
+
+-- ── FIX 8: auth_otps — expand otp_code for bcrypt hashes ─────────────────
+-- Step 1 upgrade stores bcrypt hashes (60 chars) instead of raw 6-digit OTPs.
+-- Original VARCHAR(10) is too small — expand to VARCHAR(60).
+ALTER TABLE auth_otps
+  MODIFY COLUMN otp_code VARCHAR(60) NOT NULL;
+
+SELECT 'FIX 8 — auth_otps.otp_code expanded to VARCHAR(60) ✅' AS status;
+
+-- ── DONE ──────────────────────────────────────────────────────────────────
+SELECT '✅  All fixes applied — Palm Legacy v3.2 ready!' AS result;
+
+-- ── FIX 9: Invoice support ────────────────────────────────────────────────
+-- invoice_no format: INV-<order_number>  e.g. INV-F262803000001
+CREATE TABLE IF NOT EXISTS invoices (
+  id           INT         NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  invoice_no   VARCHAR(30) NOT NULL UNIQUE,
+  order_id     INT         NOT NULL,
+  picklist_no  VARCHAR(20) DEFAULT NULL,
+  generated_by INT,
+  generated_at TIMESTAMP   DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id)     REFERENCES orders(id) ON DELETE CASCADE,
+  FOREIGN KEY (generated_by) REFERENCES users(id)  ON DELETE SET NULL
+);
+
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS invoice_no VARCHAR(30) DEFAULT NULL;
+
+SELECT 'FIX 9 — invoices table + orders.invoice_no ✅' AS status;
+
+-- ── FIX 10: Shiprocket integration columns ────────────────────────────────
+ALTER TABLE orders
+  ADD COLUMN IF NOT EXISTS shiprocket_order_id   VARCHAR(50)  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS shiprocket_shipment_id VARCHAR(50)  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS awb_code               VARCHAR(50)  DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS courier_name           VARCHAR(100) DEFAULT NULL,
+  ADD COLUMN IF NOT EXISTS tracking_url           VARCHAR(500) DEFAULT NULL;
+
+SELECT 'FIX 10 — Shiprocket columns added to orders ✅' AS status;

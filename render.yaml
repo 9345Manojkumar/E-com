@@ -1,0 +1,91 @@
+# render.yaml — Palm Legacy v3.1
+# Fixes from v3.0:
+#   ✅ Added databases: block (was referenced but undefined — deploy blocker)
+#   ✅ Added JWT_SECRET as a sync:false secret
+#   ✅ Added Razorpay key placeholders
+#   ✅ PORT aligned to 4000
+#
+# NOTE: Render's free database tier is PostgreSQL, not MySQL.
+# For MySQL on Render, use an external provider (Railway MySQL / PlanetScale / Clever Cloud).
+# Set DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME manually in the Render dashboard
+# and remove the `fromDatabase` references below.
+#
+# To use Railway MySQL: deploy server.js on Railway instead —
+#   railway up  (Railway auto-detects Node.js + injects DB vars)
+
+databases:
+  - name: palm-legacy-db
+    plan: free          # Render free = PostgreSQL. Switch to MySQL external if needed.
+    databaseName: palm_legacy
+    user: palm_user
+
+services:
+  - type: web
+    name: palm-legacy
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: ALLOWED_ORIGIN
+        value: https://palm-legacy.onrender.com   # update to your domain
+
+      # ── Database (from the databases block above) ────────────────────────
+      - key: DB_HOST
+        fromDatabase:
+          name: palm-legacy-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: palm-legacy-db
+          property: port
+      - key: DB_USER
+        fromDatabase:
+          name: palm-legacy-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: palm-legacy-db
+          property: password
+      - key: DB_NAME
+        fromDatabase:
+          name: palm-legacy-db
+          property: database
+
+      # ── Secrets — set these in the Render dashboard (sync:false) ─────────
+      - key: JWT_SECRET
+        sync: false       # set manually in Render dashboard → Environment
+
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+
+      # ── OTP channels (all optional) — set in dashboard if using them ──────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: MSG91_AUTH_KEY
+        sync: false
+      - key: MSG91_TEMPLATE_ID
+        sync: false
+      - key: WATI_API_URL
+        sync: false
+      - key: WATI_ACCESS_TOKEN
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_WHATSAPP_FROM
+        sync: false
