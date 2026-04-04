@@ -55,7 +55,7 @@ const { validateBody, patterns, trim, posDec }  = require('./middleware/validate
 
 const app  = express();
 const PORT = parseInt(env('PORT'), 10) || 4000;
-const JWT  = () => env('JWT_SECRET'); // function so it reads the possibly-updated value
+const JWT  = env('JWT_SECRET'); // read after dotenv / process.env is set
 
 // ── security headers ──────────────────────────────────────────────────────
 app.use(helmet({
@@ -93,7 +93,7 @@ function makeToken(user) {
   const name = user.name || `${user.first_name || ''} ${user.last_name || ''}`.trim();
   return jwt.sign(
     { id: user.id, name, email: user.email, mobile: user.mobile, role: user.role },
-    JWT,
+    env('JWT_SECRET'),
     { expiresIn: '7d' }
   );
 }
@@ -1477,8 +1477,12 @@ async function pollShiprocketDeliveries() {
 // ═══════════════════════════════════════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════════════════════════════════════
-app.use(express.static(__dirname));
+// Serve palm-legacy.html for root URL — BEFORE express.static
+// so index.html doesn't intercept /
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'palm-legacy.html')));
+
+// Static files — explicitly exclude index.html so it doesn't override /
+app.use(express.static(__dirname, { index: false }));
 
 // ─── 404 for unknown /api/* routes ────────────────────────────────────────
 app.use((req, _res, next) => {
