@@ -24,17 +24,18 @@ const envFile = ['.env', '.env.example']
   .map(f => path.join(__dirname, f))
   .find(f => fs.existsSync(f));
 
-if (!envFile) {
-  console.error('\n❌  No .env file found.\n    Copy .env.example to .env and fill in your values.\n');
-  process.exit(1);
+if (envFile) {
+  require('dotenv').config({ path: envFile });
+  console.log('📄  Loaded env from:', envFile);
+} else {
+  console.log('ℹ️   No .env file — using environment variables from system (Render/Railway).');
 }
-require('dotenv').config({ path: envFile });
 
 const env = k => (process.env[k] || '').trim();
 
 if (!env('JWT_SECRET')) {
-  console.error('\n❌  JWT_SECRET is not set in .env\n    Add: JWT_SECRET=any_long_random_string\n');
-  process.exit(1);
+  console.warn('⚠️  JWT_SECRET not set — using temporary key. Set it in production!');
+  process.env.JWT_SECRET = require('crypto').randomBytes(32).toString('hex');
 }
 
 // ── dependencies ──────────────────────────────────────────────────────────
@@ -54,7 +55,7 @@ const { validateBody, patterns, trim, posDec }  = require('./middleware/validate
 
 const app  = express();
 const PORT = parseInt(env('PORT'), 10) || 4000;
-const JWT  = env('JWT_SECRET');
+const JWT  = () => env('JWT_SECRET'); // function so it reads the possibly-updated value
 
 // ── security headers ──────────────────────────────────────────────────────
 app.use(helmet({
