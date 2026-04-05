@@ -593,225 +593,295 @@ tr:hover td{background:#fafaf8;}
 .sum-box-val{font-family:'Cinzel',serif;font-size:20px;font-weight:800;}
 .sum-box-sub{font-size:10px;color:var(--text-light);margin-top:3px;}
 
+
 /* ══════════════════════════════════════════════════════════════════
-   MOBILE FIRST RESPONSIVE — Palm Legacy v3.2
-   Targets: 320px phones, 768px tablets, 1024px laptops+
+   DEFINITIVE MOBILE RESPONSIVE — Palm Legacy v3.2
+   Fixes: horizontal scroll, nav overflow, hero overflow, trust bar
    ══════════════════════════════════════════════════════════════════ */
 
-/* Base: prevent any horizontal overflow on all screens */
-html, body {
+/* ─── 1. ROOT OVERFLOW LOCK ────────────────────────────────────────
+   BOTH html AND body must have overflow-x:hidden.
+   body alone is NOT enough — the html element scrolls independently. */
+html {
+  overflow-x: hidden !important;
   max-width: 100%;
-  overflow-x: hidden;
+}
+body {
+  overflow-x: hidden !important;
+  max-width: 100%;
   -webkit-text-size-adjust: 100%;
 }
-*, *::before, *::after { box-sizing: border-box; }
-
-/* ── Navigation ── */
-.nav-inner { padding: 8px 16px; gap: 8px; }
-.nav-logo-text { font-size: clamp(14px, 4vw, 20px); }
-.nav-logo-sub  { font-size: clamp(8px, 2vw, 11px); }
-.btn-cart { padding: 7px 12px; font-size: 10px; gap: 5px; }
-.nav-user-btn { padding: 5px 10px; font-size: 9px; }
-
-/* ── Hero section ── */
-.hero-section { min-height: auto; }
-.hero-content { padding: clamp(32px,6vw,56px) clamp(16px,4vw,24px); }
-.hero-title { font-size: clamp(32px, 8vw, 72px); }
-.hero-subtitle { font-size: clamp(14px, 3.5vw, 20px); }
-.hero-desc { font-size: clamp(13px, 3vw, 16px); }
-.hero-btns { flex-wrap: wrap; gap: 10px; }
-.btn-primary, .btn-secondary { padding: clamp(10px,2.5vw,14px) clamp(18px,4vw,28px); font-size: clamp(10px,2.5vw,13px); }
-
-/* ── Trust bar ── */
-.trust-inner { padding: 10px 16px; gap: 8px; flex-wrap: wrap; }
-.trust-item { font-size: clamp(10px, 2.5vw, 13px); gap: 6px; }
-
-/* ── Sections ── */
-.section-title { font-size: clamp(24px, 6vw, 48px); }
-.section-desc  { font-size: clamp(13px, 3vw, 17px); padding: 0 8px; }
-
-/* ── Products grid ── */
-.products-grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
-  padding: 0 16px;
+/* Every element: box-sizing + can't be wider than its parent */
+*, *::before, *::after {
+  box-sizing: border-box;
 }
 
-/* ── Footer ── */
-.footer-inner { gap: 20px; }
-.footer-brand { max-width: 100%; }
+/* ─── 2. IMAGES / MEDIA ─────────────────────────────────────────── */
+img, video, iframe, embed, object, svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
 
-/* ── Cart sidebar ── */
-.cart-sidebar { width: min(360px, 100vw); }
+/* ─── 3. NAVIGATION ─────────────────────────────────────────────── */
+nav { width: 100%; max-width: 100%; overflow: hidden; }
+.nav-inner {
+  max-width: 100%;
+  padding: 8px 16px;
+  gap: 8px;
+  overflow: hidden;
+}
+/* Logo: never shrinks below its text */
+.nav-logo { flex-shrink: 0; min-width: 0; }
+/* Actions: allow shrink, never overflow */
+.nav-actions { flex-shrink: 0; gap: 6px; overflow: hidden; }
+/* Buttons: white-space nowrap already set; clamp size */
+.btn-cart { flex-shrink: 0; }
+.nav-user-btn { flex-shrink: 0; }
+.nav-admin-btn { flex-shrink: 0; }
 
-/* ── OTP boxes — prevent overflow on tiny screens ── */
-.otp-boxes { gap: clamp(4px, 2vw, 10px); }
-.otp-input  { width: clamp(36px, 11vw, 44px); height: clamp(42px, 12vw, 50px); font-size: clamp(16px, 4vw, 20px); }
+/* ─── 4. ANNOUNCE BAR ───────────────────────────────────────────── */
+.announce-bar {
+  overflow: hidden;
+  white-space: normal;        /* allow text to wrap */
+  text-overflow: clip;
+  max-width: 100%;
+}
 
-/* ── Auth card ── */
-.auth-card { max-width: min(420px, calc(100vw - 32px)); margin: 16px; }
+/* ─── 5. HERO (slider + default fallback) ───────────────────────── */
+.hero-banner-section,
+.hero-slider,
+.hero,
+.hero-default { overflow: hidden; width: 100%; max-width: 100%; }
 
-/* ── Checkout modal ── */
-.modal-box { max-width: min(490px, calc(100vw - 16px)); margin: 8px; }
+.hero-slides-track { max-width: 100%; }
+.hero-slide        { min-width: 100%; max-width: 100%; overflow: hidden; }
+.hero-slide img    { max-width: 100%; width: 100%; }
+.hero-slide-overlay { max-width: 100%; box-sizing: border-box; }
+.hero-slide-content { max-width: min(560px, 100%); }
 
-/* ── Admin screen ── */
-.admin-screen { display: flex; flex-direction: column; }
+/* Hero-default inner div — was max-width:600px, breaks on mobile */
+.hero-default .hero-content > div { max-width: 100%; }
+.hero-content { max-width: 100%; overflow: hidden; }
 
-/* ── Admin topbar ── */
-.topbar { padding: 10px 14px; }
-.tb-search { max-width: 140px; }
-.tb-search input { width: 110px; }
+/* ─── 6. SECTIONS ───────────────────────────────────────────────── */
+section, .trust-bar, .trust-inner,
+.products-section, .why-section, .process-section,
+.benefits-section, .testimonials-section, .newsletter-section {
+  max-width: 100%;
+  overflow: hidden;
+}
 
-/* ── Admin content padding ── */
-.pc { padding: clamp(12px, 3vw, 20px); }
+/* ─── 7. CARDS / PANELS / MODALS ───────────────────────────────── */
+.card, .modal-box, .am, .det-panel,
+.auth-card, .success-box, .dp-body { max-width: 100%; }
 
-/* ── Admin cards — don't exceed screen ── */
-.card { max-width: 100%; overflow: hidden; }
-.card[style*="max-width:560px"], .card[style*="max-width:500px"] { max-width: 100% !important; }
+/* ─── 8. ADMIN ──────────────────────────────────────────────────── */
+.admin-screen, .admin-main, .pc, .apage { overflow-x: hidden; max-width: 100%; }
+.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+table { min-width: 460px; } /* tables scroll inside .tbl-wrap */
 
-/* ── Tables — always scrollable ── */
-.tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-table { min-width: 500px; }
+/* ─── 9. CART SIDEBAR ───────────────────────────────────────────── */
+.cart-sidebar { max-width: 100vw; }
 
-/* ── Stats grid ── */
-.stats-grid { grid-template-columns: repeat(auto-fill, minmax(min(160px,45%), 1fr)); gap: 10px; }
-.stat-card  { padding: 14px; }
-.stat-num   { font-size: clamp(20px, 5vw, 28px); }
+/* ══════════════════════════════════════════════════════════════════
+   BREAKPOINTS
+   ══════════════════════════════════════════════════════════════════ */
 
-/* ── Selection/picklist bar ── */
-.pick-bar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-.pick-bar > div { flex-wrap: wrap; }
+/* ── LAPTOP: 1025px – 1280px ──────────────────────────────────── */
+@media (max-width: 1024px) {
+  .stats-grid    { grid-template-columns: 1fr 1fr; }
+  .footer-inner  { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .process-steps { grid-template-columns: repeat(3,1fr); }
+  .process-steps::before { display: none; }
+  .hero-slide img { height: 420px; }
+}
 
-/* ── Order detail panel ── */
-.det-panel { width: min(380px, 100vw); }
-
-/* ── Tablet: 481px – 768px ── */
+/* ── TABLET: 769px – 1024px ─────────────────────────────────────── */
 @media (max-width: 768px) {
+
   /* Nav */
-  .nav-inner { padding: 8px 14px; }
+  .nav-links  { display: none; }
+  .hamburger  { display: block; }
+  .nav-inner  { padding: 8px 14px; gap: 6px; }
+  .logo-txt span { display: none; }      /* hide "Pure Palm Jaggery" sub-text */
 
-  /* Hero */
-  .hero-content { grid-template-columns: 1fr; gap: 24px; text-align: center; padding: 36px 16px; }
-  .hero-visual  { display: none; }
-  .hero-stats   { justify-content: center; flex-wrap: wrap; gap: 16px; }
-  .hero-btns    { justify-content: center; }
+  /* Hide text labels → icon + count only on mobile */
+  .nav-user-name  { display: none; }
+  .nav-admin-text { display: none; }
+  .btn-cart-text  { display: none; }
+  .nav-user-btn  { padding: 6px; border-radius: 50%; gap: 0; }
+  .nav-admin-btn { padding: 6px 9px; }
+  .btn-cart      { padding: 8px 11px; gap: 4px; }
 
-  /* Sections */
-  .products-section, .why-section, .process-section,
-  .benefits-section, .testimonials-section, .newsletter-section { padding: 40px 16px; }
+  /* Announce bar */
+  .announce-bar { font-size: 11px; padding: 7px 12px; text-align: center; }
+
+  /* Hero slider */
+  .hero-slide img { height: 280px; }
+  .hero-slide-content h2 { font-size: clamp(18px,5.5vw,30px); }
+  .hero-slide-content p  { font-size: 13px; display: none; }
+
+  /* Hero default */
+  .hero-default .hero-content { padding: 44px 20px; }
+  .hero-default .hero-content > div { max-width: 100%; }
+  .hero-default .hero-title { font-size: clamp(26px,8vw,42px); }
+  .hero-default .hero-sub   { font-size: 15px; }
+  .hero-default .hero-desc  { font-size: 13px; }
+
+  /* Hero stats — 3 across, smaller */
+  .hero-stats { gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .stat-num   { font-size: 20px; }
+  .stat-label { font-size: 9px; letter-spacing: 1px; }
+
+  /* Hero buttons */
+  .hero-btns { justify-content: center; flex-wrap: wrap; gap: 10px; }
+
+  /* Trust bar — 2 columns grid */
+  .trust-inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    padding: 10px 16px;
+    justify-items: start;
+  }
+  .trust-item { font-size: 11px; gap: 5px; }
+
+  /* Products grid — 2 columns */
+  .products-grid { grid-template-columns: repeat(2,1fr); gap: 12px; padding: 0 14px; }
 
   /* Benefits */
   .benefits-inner { grid-template-columns: 1fr; gap: 32px; }
 
   /* Process */
-  .process-steps { grid-template-columns: repeat(2, 1fr); }
+  .process-steps { grid-template-columns: 1fr 1fr; }
   .process-steps::before { display: none; }
 
+  /* Testimonials */
+  .testimonials-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Newsletter */
+  .newsletter-form { max-width: 100%; }
+
   /* Footer */
-  .footer-inner { grid-template-columns: 1fr 1fr; gap: 24px; }
+  .footer-inner { grid-template-columns: 1fr 1fr; gap: 20px; }
 
   /* Admin sidebar */
-  .sidebar { transform: translateX(-100%); width: min(260px, 85vw); }
+  .sidebar { transform: translateX(-100%); width: min(240px,80vw); }
   .sidebar.sb-open { transform: translateX(0); }
   .admin-main { margin-left: 0; }
   .admin-hamburger { display: block; }
-
-  /* Admin tables */
   .tb-search { display: none; }
 
-  /* Stats */
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  /* Admin stats */
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
 
   /* Checkout form */
   .form-row2 { grid-template-columns: 1fr; }
+
+  /* Detail panel — full width */
+  .det-panel { width: 100vw; }
 }
 
-/* ── Phone: 320px – 480px ── */
+/* ── PHONE: ≤ 480px ──────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  /* Nav — extra compact */
-  .nav-inner { padding: 8px 12px; }
-  .nav-logo-img { width: 32px; height: 32px; }
 
-  /* Hero */
-  .hero-title  { font-size: clamp(28px, 9vw, 42px); letter-spacing: -0.5px; }
-  .hero-desc   { font-size: 13px; }
-  .hero-btns   { flex-direction: column; align-items: stretch; }
-  .btn-primary, .btn-secondary { text-align: center; }
+  /* Nav — very compact */
+  .nav-inner { padding: 7px 10px; gap: 5px; }
+  .nav-logo > div:first-child { height: 36px !important; }
+  .nav-logo > div:first-child img { width: 36px !important; height: 36px !important; }
+  .logo-txt { font-size: 13px; letter-spacing: 1px; }
+  .nav-user-avatar { width: 26px; height: 26px; font-size: 9px; }
+  .btn-cart { padding: 7px 9px; font-size: 11px; }
+  .cart-count { width: 16px; height: 16px; font-size: 9px; }
 
-  /* Trust items — 2 per row */
-  .trust-inner { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  /* Announce */
+  .announce-bar { font-size: 10px; padding: 6px 10px; }
 
-  /* Sections */
+  /* Hero slider */
+  .hero-slide img { height: 220px; }
+  .hero-slide-content h2 { font-size: clamp(16px,5.5vw,24px); }
+  .hero-slide-overlay { padding: 0 14px; }
+
+  /* Hero default */
+  .hero-default .hero-content { padding: 36px 14px; }
+  .hero-default .hero-title { font-size: clamp(24px,8vw,36px); }
+  .hero-btns { flex-direction: column; align-items: stretch; gap: 8px; }
+  .btn-primary, .btn-secondary { text-align: center; width: 100%; }
+
+  /* Hero stats — row, smaller font */
+  .hero-stats { gap: 10px; }
+  .stat-num   { font-size: 18px; }
+  .stat-label { font-size: 8px; letter-spacing: 0.5px; }
+
+  /* Trust bar — still 2 col */
+  .trust-inner { grid-template-columns: 1fr 1fr; gap: 6px; padding: 10px 12px; }
+  .trust-item  { font-size: 10px; }
+
+  /* Sections padding */
   .products-section, .why-section, .process-section,
   .benefits-section, .testimonials-section, .newsletter-section { padding: 36px 12px; }
-  .section-title { font-size: clamp(22px, 7vw, 32px); }
+  .section-title { font-size: clamp(20px,7vw,30px); }
 
-  /* Products: 1 column on tiny screens */
+  /* Products — 1 column */
   .products-grid { grid-template-columns: 1fr; gap: 14px; padding: 0 12px; }
 
-  /* Why grid: 1 column */
-  .why-grid { grid-template-columns: 1fr; }
-
-  /* Process: 1 column */
-  .process-steps { grid-template-columns: 1fr; gap: 16px; }
-
-  /* Testimonials: 1 column */
+  /* Why, process, testimonials — 1 column */
+  .why-grid          { grid-template-columns: 1fr; }
+  .process-steps     { grid-template-columns: 1fr; gap: 14px; }
   .testimonials-grid { grid-template-columns: 1fr; }
 
-  /* Footer: 1 column */
-  .footer-inner { grid-template-columns: 1fr; gap: 20px; }
+  /* Footer — 1 column */
+  .footer-inner { grid-template-columns: 1fr; gap: 18px; }
 
-  /* Cart sidebar: full width */
+  /* Cart — full width */
   .cart-sidebar { width: 100vw; }
 
-  /* Admin */
-  .pc { padding: 12px; }
-  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-  .stat-card { padding: 12px 10px; }
-
-  /* Order detail panel */
-  .det-panel { width: 100vw; }
-
-  /* Topbar buttons */
-  .topbar-right .abtn span { display: none; }
-
-  /* Admin filter bar — wrappable */
-  .filter-bar { gap: 5px; }
-  .filter-bar .fb { padding: 5px 10px; font-size: 10px; }
-
-  /* Table header text — smaller */
-  th { font-size: 10px; padding: 8px 6px; }
-  td { font-size: 11px; padding: 8px 6px; }
-
-  /* Shiprocket/action button rows — wrap */
-  [style*="display:flex;gap:8px;margin-top:8px"] { flex-wrap: wrap; }
-  [style*="display:flex;gap:5px;flex-wrap:wrap"] { gap: 4px; }
-
-  /* Announcement bar */
-  .announce-bar { font-size: 11px; padding: 7px 12px; }
-
-  /* Newsletter form — stack on tiny */
+  /* Newsletter — stack */
   .newsletter-form { flex-direction: column; border-radius: 8px; }
-  .newsletter-form input  { border-radius: 8px 8px 0 0; padding: 12px; }
-  .newsletter-form button { border-radius: 0 0 8px 8px; padding: 12px; }
+  .newsletter-form input  { border-radius: 8px 8px 0 0; padding: 12px 14px; }
+  .newsletter-form button { border-radius: 0 0 8px 8px; padding: 12px; text-align: center; }
 
-  /* Modal — full width on tiny */
-  .modal-box  { max-width: 100%; margin: 0; border-radius: 16px 16px 0 0; position: fixed; bottom: 0; }
-  .auth-card  { max-width: 100%; margin: 0; border-radius: 16px 16px 0 0; position: fixed; bottom: 0; }
+  /* Auth card — bottom sheet */
+  .auth-overlay { align-items: flex-end !important; }
+  .auth-card {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 95vh;
+  }
 
-  /* OTP boxes */
-  .otp-boxes { gap: 6px; }
+  /* Checkout modal — bottom sheet */
+  .modal-overlay { align-items: flex-end !important; }
+  .modal-box {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 20px 20px 0 0;
+    max-height: 95vh;
+    margin: 0;
+  }
+
+  /* Admin */
+  .pc { padding: 10px; }
+  .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-card  { padding: 12px 10px; }
+  .stat-num   { font-size: 20px; }
+  .filter-bar { flex-wrap: wrap; gap: 4px; }
+  .filter-bar .fb { padding: 5px 9px; font-size: 10px; }
+  th { font-size: 10px; padding: 7px 5px; }
+  td { font-size: 11px; padding: 7px 5px; }
+  .otp-boxes { gap: 6px; justify-content: center; }
   .otp-input  { width: 38px; height: 44px; font-size: 18px; }
-
-  /* Pick/selection action row */
-  .pick-bar { padding: 8px 10px; }
-  #bulkStatusSel { font-size: 10px; height: 26px; }
+  .pick-bar   { flex-wrap: wrap; padding: 8px 10px; }
 }
 
-/* ── Very small: < 360px ── */
+/* ── TINY PHONE: ≤ 360px ────────────────────────────────────────── */
 @media (max-width: 360px) {
-  .hero-title  { font-size: 26px; }
-  .btn-primary { font-size: 10px; padding: 10px 16px; }
-  .products-grid { padding: 0 8px; }
-  .otp-input  { width: 34px; height: 40px; font-size: 16px; }
+  .hero-slide img { height: 185px; }
+  .hero-default .hero-title { font-size: 22px; }
+  .stat-num { font-size: 16px; }
   .stats-grid { grid-template-columns: 1fr; }
+  .products-grid { padding: 0 8px; }
+  .otp-input { width: 32px; height: 38px; font-size: 15px; }
+  .trust-inner { grid-template-columns: 1fr; }
 }
