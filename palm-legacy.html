@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Palm Legacy – Pure Palm Jaggery</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -696,9 +696,9 @@ tr:hover td{background:#fafaf8;}
           <button class="nav-user-btn" onclick="goToAuth()">👤 Sign In</button>
         </div>
         <div id="navAdminBtn" style="display:none">
-          <button class="nav-admin-btn" onclick="goToAdmin()">⚙️ Admin</button>
+          <button class="nav-admin-btn" onclick="goToAdmin()">⚙️<span class="nav-admin-text"> Admin</span></button>
         </div>
-        <button class="btn-cart" onclick="toggleCart()">🛒 Cart <div class="cart-count" id="cartCount">0</div></button>
+        <button class="btn-cart" onclick="toggleCart()">🛒<span class="btn-cart-text"> Cart</span><div class="cart-count" id="cartCount">0</div></button>
         <button class="hamburger" onclick="openMobileNav()">☰</button>
       </div>
     </div>
@@ -719,11 +719,11 @@ tr:hover td{background:#fafaf8;}
     </div>
 
     <!-- Fallback default slide (shown when no banner uploaded) -->
-    <div class="hero-default" id="heroDefault">
+    <div class="hero-default" id="heroDefault" style="overflow:hidden;width:100%;max-width:100vw">
       <div class="hero-bg"></div>
-      <div class="hero-content">
+      <div class="hero-content" style="overflow:hidden;max-width:100%">
         <div>
-          <div class="hero-badge"><span>🌴 From the Heart of Tamil Nadu</span></div>
+          <div class="hero-badge" style="max-width:100%;overflow:hidden"><span style="overflow:hidden;text-overflow:ellipsis">🌴 From the Heart of Tamil Nadu</span></div>
           <h1 class="hero-title">Pure <span class="gold">Palm</span><br>Jaggery</h1>
           <p class="hero-sub">Nature's Golden Sweetener — Harvested Fresh</p>
           <p class="hero-desc">Hand-crafted by traditional tappers from century-old Palmyra palms. No chemicals, no additives. Just pure sweetness the way nature intended.</p>
@@ -741,7 +741,7 @@ tr:hover td{background:#fafaf8;}
   </section>
 
   <!-- TRUST BAR -->
-  <div class="trust-bar">
+  <div class="trust-bar" style="overflow:hidden;max-width:100%">
     <div class="trust-inner">
       <div class="trust-item">🌿 100% Natural</div>
       <div class="trust-item">🚚 Free Delivery ₹499+</div>
@@ -2153,16 +2153,28 @@ function loginSuccess(user){
 function updateNavAuth(){
   const area=document.getElementById("navAuthArea");
   const adminBtn=document.getElementById("navAdminBtn");
+  const isMobile = window.innerWidth <= 768;
   if(currentUser){
     const ini=currentUser.name.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
-    area.innerHTML=`<div class="nav-user-btn" onclick="goToAdmin()"><div class="nav-user-avatar">${ini}</div>${currentUser.name.split(" ")[0]}</div>`;
-    // Show admin button only for admin/manager/viewer
-    adminBtn.style.display=["admin","manager","viewer"].includes(currentUser.role)?"block":"none";
+    const firstName=currentUser.name.split(" ")[0];
+    // On mobile: avatar only. On desktop: avatar + name
+    if(isMobile){
+      area.innerHTML=`<div class="nav-user-btn nav-user-btn--avatar" onclick="goToAdmin()" title="${firstName}"><div class="nav-user-avatar">${ini}</div></div>`;
+    } else {
+      area.innerHTML=`<div class="nav-user-btn" onclick="goToAdmin()"><div class="nav-user-avatar">${ini}</div><span class="nav-user-name">${firstName}</span></div>`;
+    }
+    // Admin button: desktop shows it, mobile hides it (accessible via hamburger → Admin page)
+    const hasAdmin=["admin","manager","viewer"].includes(currentUser.role);
+    adminBtn.style.display=(hasAdmin && !isMobile)?"block":"none";
   } else {
-    area.innerHTML=`<button class="nav-user-btn" onclick="goToAuth()">👤 Sign In</button>`;
+    area.innerHTML=isMobile
+      ? `<button class="nav-user-btn nav-user-btn--avatar" onclick="goToAuth()" title="Sign In">👤</button>`
+      : `<button class="nav-user-btn" onclick="goToAuth()">👤 Sign In</button>`;
     adminBtn.style.display="none";
   }
 }
+// Re-run updateNavAuth on resize so nav adapts dynamically
+window.addEventListener('resize', ()=>{ if(currentUser!==null || document.getElementById('navAuthArea').innerHTML) updateNavAuth(); });
 
 // ── Idle auto-logout ──────────────────────────────────────────────────────
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
