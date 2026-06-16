@@ -57,6 +57,28 @@ const app  = express();
 const PORT = parseInt(env('PORT'), 10) || 4000;
 const JWT  = env('JWT_SECRET'); // read after dotenv / process.env is set
 
+// ── trust proxy ───────────────────────────────────────────────────────────
+// REQUIRED on Render, Railway, Heroku, Vercel — any platform that sits
+// behind a reverse proxy / load balancer.
+// Without this, express-rate-limit throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR
+// and every login/OTP request fails before reaching the route handler.
+//
+// 'loopback'  = trust localhost proxy (local dev with nginx)
+// 1           = trust 1 hop (Render, Railway, Heroku)
+// true        = trust all (only for debugging — insecure in production)
+//
+// We read TRUST_PROXY from .env so you can tune per environment:
+//   local dev:   TRUST_PROXY=false  (or leave unset — defaults to 1)
+//   Render:      TRUST_PROXY=1
+//   behind nginx:TRUST_PROXY=loopback
+const trustProxyEnv = process.env.TRUST_PROXY;
+const trustProxy = trustProxyEnv === 'false' ? false
+                 : trustProxyEnv === 'true'  ? true
+                 : trustProxyEnv === 'loopback' ? 'loopback'
+                 : trustProxyEnv ? parseInt(trustProxyEnv, 10) || 1
+                 : 1;   // default: trust 1 hop — works on Render/Railway/Heroku
+app.set('trust proxy', trustProxy);
+
 // ── security headers ──────────────────────────────────────────────────────
 app.use(helmet({
   contentSecurityPolicy:    false, // SPA has inline scripts

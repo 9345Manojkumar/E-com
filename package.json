@@ -1,7 +1,7 @@
 {
   "name": "palm-legacy-backend",
   "version": "3.2.0",
-  "description": "Palm Legacy B2C Backend \u2014 v3.2",
+  "description": "Palm Legacy B2C Backend — v3.2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -16,7 +16,7 @@
     "express-rate-limit": "^7.2.0",
     "helmet": "^7.1.0",
     "jsonwebtoken": "^9.0.2",
-    "mysql2": "^3.9.7",
+    "mysql2": "^3.22.5",
     "nodemailer": "^6.9.13",
     "razorpay": "^2.9.2",
     "twilio": "^5.3.3"
