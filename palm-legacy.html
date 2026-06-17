@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Palm Legacy – Pure Palm Jaggery</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -41,15 +41,15 @@ body{font-family:'Nunito',sans-serif;color:var(--text-dark);overflow-x:hidden;}
 
 /* NAV */
 nav{background:var(--white);border-bottom:2px solid var(--gold-pale);position:sticky;top:0;z-index:500;box-shadow:0 2px 16px rgba(59,31,5,.08);}
-.nav-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;gap:12px;}
-.nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none;flex-shrink:0;}
-.logo-txt{font-family:'Cinzel',serif;font-size:18px;font-weight:800;color:var(--brown-dark);letter-spacing:2px;line-height:1.1;}
+.nav-inner{max-width:1280px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:10px 24px;gap:8px;min-width:0;overflow:hidden;}
+.nav-logo{display:flex;align-items:center;gap:10px;cursor:pointer;text-decoration:none;flex-shrink:1;min-width:0;overflow:hidden;}
+.logo-txt{font-family:'Cinzel',serif;font-size:18px;font-weight:800;color:var(--brown-dark);letter-spacing:2px;line-height:1.1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;}
 .logo-txt span{display:block;font-size:9px;font-weight:400;font-family:'Cormorant Garamond',serif;color:var(--brown-light);letter-spacing:3px;font-style:italic;}
 .nav-links{display:flex;gap:22px;list-style:none;}
 .nav-links a{text-decoration:none;color:var(--text-mid);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;transition:color .2s;}
 .nav-links a:hover{color:var(--gold);}
-.nav-actions{display:flex;align-items:center;gap:8px;}
-.btn-cart{background:var(--brown-dark);color:var(--gold-light);border:none;padding:9px 16px;border-radius:4px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1.5px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background .2s;white-space:nowrap;}
+.nav-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;}
+.btn-cart{background:var(--brown-dark);color:var(--gold-light);border:none;padding:9px 16px;border-radius:4px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:1.5px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:background .2s;white-space:nowrap;flex-shrink:0;}
 .btn-cart:hover{background:var(--gold);color:var(--brown-dark);}
 .cart-count{background:var(--gold-light);color:var(--brown-dark);border-radius:50%;width:18px;height:18px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:800;}
 .nav-user-btn{display:flex;align-items:center;gap:7px;background:var(--cream);border:1.5px solid var(--gold);border-radius:30px;padding:5px 12px;cursor:pointer;font-family:'Cinzel',serif;font-size:10px;letter-spacing:1px;color:var(--brown-dark);font-weight:700;transition:background .2s;white-space:nowrap;}
@@ -465,6 +465,18 @@ tr:hover td{background:#fafaf8;}
   .hero-btns{justify-content:center;}
   .nav-links{display:none;}
   .hamburger{display:block;}
+  /* Shrink logo image on mobile */
+  .nav-logo img{width:36px !important;height:36px !important;}
+  /* Hide logo text subtitle on mobile */
+  .logo-txt span{display:none;}
+  /* Reduce logo font size */
+  .logo-txt{font-size:14px;letter-spacing:1px;}
+  /* Hide "Cart" text — show icon + count only */
+  .btn-cart-text{display:none;}
+  /* Tighter cart button */
+  .btn-cart{padding:8px 10px;}
+  /* Smaller user avatar button */
+  .nav-user-btn{padding:5px 8px;font-size:9px;}
   .benefits-inner{grid-template-columns:1fr;}
   .process-steps{grid-template-columns:1fr 1fr;}
   .form-row2{grid-template-columns:1fr;}
@@ -475,8 +487,12 @@ tr:hover td{background:#fafaf8;}
   .stats-grid{grid-template-columns:1fr 1fr;}
   .tb-search{display:none;}
 }
+@media(max-width:380px){
+  .logo-txt{display:none;}
+  .nav-logo{gap:0;}
+}
 @media(max-width:480px){
-  .nav-inner{padding:8px 14px;}
+  .nav-inner{padding:8px 12px;gap:6px;}
   .products-section,.why-section,.process-section,.benefits-section,.testimonials-section,.newsletter-section{padding:48px 16px;}
   .stats-grid{grid-template-columns:1fr;}
   .cart-sidebar{width:100%;}
@@ -719,7 +735,7 @@ tr:hover td{background:#fafaf8;}
     </div>
 
     <!-- Fallback default slide (shown when no banner uploaded) -->
-    <div class="hero-default" id="heroDefault" style="overflow:hidden;width:100%;max-width:100%">
+    <div class="hero-default" id="heroDefault" style="overflow:hidden;max-width:100%;width:100%">
       <div class="hero-bg"></div>
       <div class="hero-content" style="overflow:hidden;max-width:100%">
         <div>
@@ -2153,7 +2169,7 @@ function loginSuccess(user){
 function updateNavAuth(){
   const area=document.getElementById("navAuthArea");
   const adminBtn=document.getElementById("navAdminBtn");
-  const isMobile = window.innerWidth < 900;
+  const isMobile = window.innerWidth < 768;
   if(currentUser){
     const ini=currentUser.name.split(" ").map(w=>w[0]).join("").substring(0,2).toUpperCase();
     const firstName=currentUser.name.split(" ")[0];
