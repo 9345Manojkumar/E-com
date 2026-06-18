@@ -2537,10 +2537,11 @@ async function apiFetch(path, options={}){
 // Load all data from MySQL API into memory
 async function loadFromAPI(){
   try {
-    const [products, categories, uoms] = await Promise.all([
+    const [products, categories, uoms, policies] = await Promise.all([
       apiFetch('/products'),
       apiFetch('/categories'),
       apiFetch('/uom'),
+      apiFetch('/pricing').catch(()=>[]),   // load pricing policies from DB
     ]);
     // Replace in-memory arrays
     PRODUCTS  = products.map(p=>({
@@ -2562,8 +2563,33 @@ async function loadFromAPI(){
     }));
     CAT_LIST  = categories.map(c=>({ id:c.id, name:c.name, icon:c.icon, bg:c.bg_color }));
     UOM_LIST  = uoms.map(u=>({ id:u.id, name:u.name, short:u.short_code }));
+
+    // Map DB policy rows → in-memory POLICIES shape
+    if(policies && policies.length){
+      POLICIES = policies.map(p=>({
+        id:         p.id,
+        type:       p.type,
+        name:       p.name,
+        dtype:      p.discount_type,
+        percent:    p.percent      ? parseFloat(p.percent)       : null,
+        override:   p.override_price ? parseFloat(p.override_price) : null,
+        cap:        p.cap_amount   ? parseFloat(p.cap_amount)    : null,
+        scope:      p.scope        || 'all',
+        scopeId:    p.scope_id     ? parseInt(p.scope_id)        : null,
+        minOrder:   p.min_order_amt? parseFloat(p.min_order_amt) : null,
+        code:       p.code         || null,
+        totalUses:  p.total_uses   ? parseInt(p.total_uses)      : null,
+        perUser:    p.per_user_limit? parseInt(p.per_user_limit) : null,
+        usedCount:  p.used_count   ? parseInt(p.used_count)      : 0,
+        from:       p.valid_from   ? p.valid_from.split('T')[0]  : '',
+        to:         p.valid_to     ? p.valid_to.split('T')[0]    : '',
+        active:     p.is_active === 1 || p.is_active === true,
+      }));
+    }
+
     renderProducts();
-    console.log(`✅ Loaded ${PRODUCTS.length} products from DB`);
+    if(typeof buildPricing === 'function') buildPricing();
+    console.log(`✅ Loaded ${PRODUCTS.length} products, ${POLICIES.length} policies from DB`);
   } catch(e) { console.error('loadFromAPI error:', e.message); }
 }
 
@@ -2614,6 +2640,42 @@ async function apiSaveProduct(product, isEdit){
     is_bestseller: product.bc==='bestseller', is_active: product.active,
     images: product.images||[]
   })});
+}
+
+// Save a pricing policy to the DB
+async function apiSavePolicy(policy, isEdit){
+  const path   = isEdit ? '/admin/pricing/' + policy.id : '/admin/pricing';
+  const method = isEdit ? 'PUT' : 'POST';
+  return apiFetch(path, {method, body: JSON.stringify({
+    type:           policy.type,
+    name:           policy.name,
+    discount_type:  policy.dtype,
+    percent:        policy.percent    || null,
+    override_price: policy.override   || null,
+    cap_amount:     policy.cap        || null,
+    scope:          policy.scope      || 'all',
+    scope_id:       policy.scopeId    || null,
+    min_order_amt:  policy.minOrder   || null,
+    code:           policy.code       || null,
+    total_uses:     policy.totalUses  || null,
+    per_user_limit: policy.perUser    || null,
+    valid_from:     policy.from,
+    valid_to:       policy.to,
+    is_active:      policy.active,
+  })});
+}
+
+// Toggle policy active state in DB
+async function apiTogglePolicy(id){
+  return apiFetch('/admin/pricing/' + id + '/toggle', {method:'PATCH'});
+}
+
+// Delete policy from DB
+async function apiDeletePolicy(id){
+  return apiFetch('/admin/pricing/' + id, {method:'DELETE'}).catch(()=>
+    // fallback: use toggle to deactivate if DELETE not available
+    apiFetch('/admin/pricing/' + id + '/toggle', {method:'PATCH'})
+  );
 }
 
 // ═══════════════════════════════════════════════════
@@ -3495,18 +3557,43 @@ function savePolicy(){
   const scopeId=scope==="category"?parseInt(document.getElementById("pmol_cat_scope").value):scope==="product"?parseInt(document.getElementById("pmol_prod_scope").value):null;
   const minOrder=scope==="min_order"?parseFloat(document.getElementById("pmol_minorder").value)||null:null;
   const policy={type,name,dtype,percent,override,cap,scope,scopeId,minOrder,code:type==="promo"?code:null,totalUses,perUser,from,to,active};
-  if(editId){
+  const isEdit = !!editId;
+  if(isEdit){
     const idx=POLICIES.findIndex(p=>p.id===editId);
     if(idx>=0) POLICIES[idx]={...POLICIES[idx],...policy};
-    showAdminToast("✅ Policy updated!");
   } else {
     POLICIES.push({id:nextPolicyId(),usedCount:0,...policy});
-    showAdminToast("✅ Policy created!");
   }
-  closePolicyModal();buildPricing();
+  closePolicyModal(); buildPricing(); renderProducts();
+  // ── Persist to DB ──
+  const policyToSave = isEdit ? {...POLICIES.find(p=>p.id===editId)} : {...policy, id:nextPolicyId()-1};
+  apiSavePolicy(policyToSave, isEdit)
+    .then(()=>{
+      showAdminToast(isEdit ? "✅ Policy updated & saved!" : "✅ Policy created & saved!");
+      // Reload from DB so shop prices reflect immediately
+      return loadFromAPI();
+    })
+    .catch(e=>{ showAdminToast("⚠️ Saved locally but DB sync failed: "+e.message); });
 }
-function togglePolicy(id){const p=POLICIES.find(x=>x.id===id);if(p){p.active=!p.active;buildPricing();showAdminToast(p.active?"✅ Policy enabled":"⚠️ Policy disabled");}}
-function deletePolicy(id){if(!confirm("Delete this policy?"))return;POLICIES=POLICIES.filter(p=>p.id!==id);buildPricing();showAdminToast("🗑 Policy deleted");}
+
+function togglePolicy(id){
+  const p=POLICIES.find(x=>x.id===id);
+  if(!p) return;
+  p.active=!p.active;
+  buildPricing(); renderProducts();
+  apiTogglePolicy(id)
+    .then(()=>{ showAdminToast(p.active?"✅ Policy enabled":"⚠️ Policy disabled"); loadFromAPI(); })
+    .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+}
+
+function deletePolicy(id){
+  if(!confirm("Delete this policy?")) return;
+  POLICIES=POLICIES.filter(p=>p.id!==id);
+  buildPricing(); renderProducts();
+  apiDeletePolicy(id)
+    .then(()=>{ showAdminToast("🗑 Policy deleted"); loadFromAPI(); })
+    .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+}
 
 // ═══════════════════════════════════════════════════
 // SHOP — PRODUCTS
@@ -5112,17 +5199,25 @@ function saveProd(){
   if(!qty){showAdminToast("⚠️ Quantity required");return;}
   const images = getCurrentImgs();
   const editId=parseInt(document.getElementById("pm_id").value);
+  const prodObj={name,desc,price,mrp,qty,uomId,catId,badge,
+                 bc:badge.toLowerCase()==="bestseller"?"bestseller":"",
+                 stock,active,images};
   if(editId){
     const idx=PRODUCTS.findIndex(p=>p.id===editId);
-    if(idx>=0){PRODUCTS[idx]={...PRODUCTS[idx],name,desc,price,mrp,qty,uomId,catId,badge,bc:badge.toLowerCase()==="bestseller"?"bestseller":"",stock,active,images};}
-    showAdminToast("✅ Product updated!");
+    if(idx>=0) PRODUCTS[idx]={...PRODUCTS[idx],...prodObj};
   } else {
-    PRODUCTS.push({id:nextProdId(),name,desc,price,mrp,qty,uomId,catId,badge,bc:badge.toLowerCase()==="bestseller"?"bestseller":"",stock,sold:0,rating:5.0,reviews:0,active,images});
-    showAdminToast("✅ New product added!");
+    PRODUCTS.push({id:nextProdId(),sold:0,rating:5.0,reviews:0,...prodObj});
   }
-  closeProdModal();
-  buildProds();
-  renderProducts();
+  closeProdModal(); buildProds(); renderProducts();
+  // ── Persist to DB ──
+  const toSave = editId ? {...PRODUCTS.find(p=>p.id===editId)} : {...prodObj, id:nextProdId()-1};
+  apiSaveProduct(toSave, !!editId)
+    .then(()=>{
+      showAdminToast(editId ? "✅ Product updated & saved!" : "✅ Product added & saved!");
+      // Reload all data so shop, prices and inventory reflect immediately
+      return loadFromAPI();
+    })
+    .catch(e=>{ showAdminToast("⚠️ Saved locally but DB sync failed: "+e.message); });
 }
 
 // ══════════════════════════════════════
@@ -5221,12 +5316,27 @@ document.addEventListener('dragleave', function(){
 
 function toggleProdActive(id){
   const p=PRODUCTS.find(x=>x.id===id);
-  if(p){p.active=!p.active;buildProds();renderProducts();showAdminToast(p.active?"✅ Product enabled":"⚠️ Product disabled");}
+  if(p){
+    p.active=!p.active; buildProds(); renderProducts();
+    apiFetch('/admin/products/'+p.id, {method:'PUT', body:JSON.stringify({
+      name:p.name, description:p.desc, selling_price:p.price, mrp:p.mrp,
+      quantity:p.qty, uom_id:p.uomId, category_id:p.catId, stock_units:p.stock,
+      badge_label:p.badge, is_bestseller:p.bc==='bestseller', is_active:p.active
+    })})
+    .then(()=>{ showAdminToast(p.active?"✅ Product enabled":"⚠️ Product disabled"); loadFromAPI(); })
+    .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+  }
 }
 function deleteProd(id){
   if(!confirm("Delete this product permanently?"))return;
   const idx=PRODUCTS.findIndex(p=>p.id===id);
-  if(idx>=0){PRODUCTS.splice(idx,1);buildProds();renderProducts();showAdminToast("🗑 Product deleted");}
+  if(idx>=0){
+    const deletedId = PRODUCTS[idx].id;
+    PRODUCTS.splice(idx,1); buildProds(); renderProducts();
+    apiFetch('/admin/products/'+deletedId, {method:'DELETE'})
+      .then(()=>{ showAdminToast("🗑 Product deleted"); loadFromAPI(); })
+      .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+  }
 }
 
 // ── CATEGORY MODAL ──
@@ -5257,13 +5367,34 @@ function saveCat(){
     CAT_LIST.push({id:nextCatId(),name,icon,bg});
     showAdminToast("✅ Category added!");
   }
-  closeCatModal();buildProds();renderProducts();
+  const catId2 = parseInt(document.getElementById("cmol_id")?.value);
+  const catPayload = {
+    name: document.getElementById("cmol_name")?.value?.trim(),
+    icon: document.getElementById("cmol_icon")?.value?.trim(),
+    bg_color: document.getElementById("cmol_bg")?.value?.trim(),
+  };
+  closeCatModal(); buildProds(); renderProducts();
+  if(catId2){
+    apiFetch('/admin/categories/'+catId2, {method:'PUT', body:JSON.stringify(catPayload)})
+      .then(()=>{ showAdminToast("✅ Category saved!"); loadFromAPI(); })
+      .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+  } else {
+    apiFetch('/admin/categories', {method:'POST', body:JSON.stringify(catPayload)})
+      .then(()=>{ showAdminToast("✅ Category created!"); loadFromAPI(); })
+      .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+  }
 }
 function deleteCat(id){
   const used=PRODUCTS.some(p=>p.catId===id);
   if(used){showAdminToast("⚠️ Cannot delete — products exist in this category");return;}
   CAT_LIST=CAT_LIST.filter(c=>c.id!==id);
-  buildProds();renderProducts();showAdminToast("🗑 Category deleted");
+  const deletedCatId = parseInt(document.querySelector("#catModal [id*='id']")?.value);
+  buildProds(); renderProducts();
+  if(deletedCatId){
+    apiFetch('/admin/categories/'+deletedCatId, {method:'DELETE'})
+      .then(()=>{ showAdminToast("🗑 Category deleted"); loadFromAPI(); })
+      .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
+  } else { showAdminToast("🗑 Category deleted"); }
 }
 
 // ── UOM MODAL ──
