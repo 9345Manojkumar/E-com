@@ -830,23 +830,97 @@ app.get('/api/admin/products', auth, adminOnly, asyncHandler(async (_req, res) =
 }));
 
 app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) => {
-  const { name, description, category_id, uom_id, price, mrp, weight_grams, stock, is_active, image_url, tags } = req.body;
-  if (!name) throw new AppError('name is required.', 400);
-  // ✅ FIX: is_active ? 1 : 1  →  is_active ? 1 : 0
+  const b = req.body;
+  if (!b.name) throw new AppError('name is required.', 400);
+  // Accept both old field names (selling_price/stock_units/quantity)
+  // and new field names (price/stock/weight_grams) — whichever the client sends
+  const name         = trim(b.name, 200);
+  const description  = b.description  || '';
+  const category_id  = b.category_id;
+  const uom_id       = b.uom_id;
+  const price        = parseFloat(b.price        || b.selling_price  || 0);
+  const mrp          = parseFloat(b.mrp          || b.price || b.selling_price || 0);
+  const weight_grams = parseFloat(b.weight_grams || b.quantity       || 0);
+  const stock        = parseInt(  b.stock        || b.stock_units    || 0, 10);
+  const badge_label  = b.badge_label || '';
+  const is_bestseller= (b.is_bestseller === 1 || b.is_bestseller === true) ? 1 : 0;
+  const is_active    = (b.is_active    === 0 || b.is_active    === false)  ? 0 : 1;
+  const tags         = b.tags || '';
+
   const [r] = await db.query(
-    'INSERT INTO products (name,description,category_id,uom_id,price,mrp,weight_grams,stock,is_active,tags) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    [trim(name, 200), description || '', category_id, uom_id, price, mrp || price, weight_grams || 0, stock || 0, is_active ? 1 : 0, tags || '']
+    `INSERT INTO products
+       (name,description,category_id,uom_id,price,mrp,weight_grams,
+        stock,badge_label,is_bestseller,is_active,tags)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [name, description, category_id, uom_id, price, mrp, weight_grams,
+     stock, badge_label, is_bestseller, is_active, tags]
   );
-  if (image_url) await db.query('INSERT INTO product_images (product_id,image_url,is_primary) VALUES (?,?,1)', [r.insertId, image_url]);
-  res.status(201).json({ id: r.insertId });
+
+  // Save images if provided
+  const images = b.images || [];
+  if (images.length) {
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const src = img.src || img.image_url || '';
+      if (src) {
+        await db.query(
+          'INSERT INTO product_images (product_id,image_url,is_primary,sort_order) VALUES (?,?,?,?)',
+          [r.insertId, src, i === 0 ? 1 : 0, i]
+        );
+      }
+    }
+  } else if (b.image_url) {
+    await db.query(
+      'INSERT INTO product_images (product_id,image_url,is_primary) VALUES (?,?,1)',
+      [r.insertId, b.image_url]
+    );
+  }
+
+  res.status(201).json({ id: r.insertId, message: 'Product created.' });
 }));
 
 app.put('/api/admin/products/:id', auth, adminOnly, asyncHandler(async (req, res) => {
-  const { name, description, category_id, uom_id, price, mrp, weight_grams, stock, is_active, tags } = req.body;
+  const b = req.body;
+  // Accept both old and new field names
+  const name         = trim(b.name || '', 200);
+  const description  = b.description  || '';
+  const category_id  = b.category_id;
+  const uom_id       = b.uom_id;
+  const price        = parseFloat(b.price        || b.selling_price  || 0);
+  const mrp          = parseFloat(b.mrp          || b.price || b.selling_price || 0);
+  const weight_grams = parseFloat(b.weight_grams || b.quantity       || 0);
+  const stock        = parseInt(  b.stock        || b.stock_units    || 0, 10);
+  const badge_label  = b.badge_label || '';
+  const is_bestseller= (b.is_bestseller === 1 || b.is_bestseller === true) ? 1 : 0;
+  const is_active    = (b.is_active    === 0 || b.is_active    === false)  ? 0 : 1;
+  const tags         = b.tags || '';
+
   await db.query(
-    'UPDATE products SET name=?,description=?,category_id=?,uom_id=?,price=?,mrp=?,weight_grams=?,stock=?,is_active=?,tags=? WHERE id=?',
-    [trim(name, 200), description || '', category_id, uom_id, price, mrp || price, weight_grams || 0, stock || 0, is_active ? 1 : 0, tags || '', req.params.id]
+    `UPDATE products
+     SET name=?,description=?,category_id=?,uom_id=?,price=?,mrp=?,
+         weight_grams=?,stock=?,badge_label=?,is_bestseller=?,is_active=?,tags=?
+     WHERE id=?`,
+    [name, description, category_id, uom_id, price, mrp,
+     weight_grams, stock, badge_label, is_bestseller, is_active, tags,
+     req.params.id]
   );
+
+  // Update images if provided
+  const images = b.images || [];
+  if (images.length) {
+    await db.query('DELETE FROM product_images WHERE product_id=?', [req.params.id]);
+    for (let i = 0; i < images.length; i++) {
+      const img = images[i];
+      const src = img.src || img.image_url || '';
+      if (src) {
+        await db.query(
+          'INSERT INTO product_images (product_id,image_url,is_primary,sort_order) VALUES (?,?,?,?)',
+          [req.params.id, src, i === 0 ? 1 : (img.primary ? 1 : 0), i]
+        );
+      }
+    }
+  }
+
   res.json({ message: 'Updated.' });
 }));
 

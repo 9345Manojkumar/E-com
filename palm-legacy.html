@@ -2632,13 +2632,21 @@ async function apiPlaceOrder(payload){
 async function apiSaveProduct(product, isEdit){
   const path = isEdit ? '/admin/products/' + product.id : '/admin/products';
   const method = isEdit ? 'PUT' : 'POST';
+  // Field names match exactly what server.js POST /api/admin/products reads
   return apiFetch(path, {method, body: JSON.stringify({
-    name: product.name, description: product.desc,
-    selling_price: product.price, mrp: product.mrp,
-    quantity: product.qty, uom_id: product.uomId, category_id: product.catId,
-    stock_units: product.stock, badge_label: product.badge,
-    is_bestseller: product.bc==='bestseller', is_active: product.active,
-    images: product.images||[]
+    name:          product.name,
+    description:   product.desc        || '',
+    category_id:   product.catId,
+    uom_id:        product.uomId,
+    price:         product.price,        // server reads "price"
+    mrp:           product.mrp,
+    weight_grams:  product.qty,          // server reads "weight_grams"
+    stock:         product.stock,        // server reads "stock"
+    badge_label:   product.badge        || '',
+    is_bestseller: product.bc === 'bestseller' ? 1 : 0,
+    is_active:     product.active ? 1 : 0,
+    tags:          product.tags         || '',
+    images:        product.images       || [],
   })});
 }
 
@@ -5319,9 +5327,18 @@ function toggleProdActive(id){
   if(p){
     p.active=!p.active; buildProds(); renderProducts();
     apiFetch('/admin/products/'+p.id, {method:'PUT', body:JSON.stringify({
-      name:p.name, description:p.desc, selling_price:p.price, mrp:p.mrp,
-      quantity:p.qty, uom_id:p.uomId, category_id:p.catId, stock_units:p.stock,
-      badge_label:p.badge, is_bestseller:p.bc==='bestseller', is_active:p.active
+      name:         p.name,
+      description:  p.desc        || '',
+      category_id:  p.catId,
+      uom_id:       p.uomId,
+      price:        p.price,
+      mrp:          p.mrp,
+      weight_grams: p.qty,
+      stock:        p.stock,
+      badge_label:  p.badge       || '',
+      is_bestseller:p.bc==='bestseller' ? 1 : 0,
+      is_active:    p.active ? 1 : 0,
+      tags:         p.tags        || '',
     })})
     .then(()=>{ showAdminToast(p.active?"✅ Product enabled":"⚠️ Product disabled"); loadFromAPI(); })
     .catch(e=>{ showAdminToast("⚠️ DB sync failed: "+e.message); });
