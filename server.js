@@ -808,25 +808,53 @@ app.put('/api/admin/uom/:id', auth, adminOnly, asyncHandler(async (req, res) => 
 // PRODUCTS
 // ═══════════════════════════════════════════════════════════════════════════
 app.get('/api/products', asyncHandler(async (_req, res) => {
-  const [r] = await db.query(
+  const [products] = await db.query(
     `SELECT p.*,c.name cat_name,c.icon cat_icon,u.short_code uom_short
      FROM products p
      LEFT JOIN category_master c ON p.category_id=c.id
      LEFT JOIN uom_master u ON p.uom_id=u.id
      WHERE p.is_active=1 ORDER BY p.sort_order,p.name`
   );
-  res.json(r);
+  // Attach images for every product (was missing — caused images to
+  // disappear from the shop/admin on every reload after save)
+  if (products.length) {
+    const ids = products.map(p => p.id);
+    const [images] = await db.query(
+      `SELECT * FROM product_images WHERE product_id IN (?) ORDER BY product_id, sort_order`,
+      [ids]
+    );
+    const byProduct = {};
+    for (const img of images) {
+      (byProduct[img.product_id] ||= []).push(img);
+    }
+    for (const p of products) p.images = byProduct[p.id] || [];
+  }
+  res.json(products);
 }));
 
 app.get('/api/admin/products', auth, adminOnly, asyncHandler(async (_req, res) => {
-  const [r] = await db.query(
+  const [products] = await db.query(
     `SELECT p.*,c.name cat_name,u.short_code uom_short
      FROM products p
      LEFT JOIN category_master c ON p.category_id=c.id
      LEFT JOIN uom_master u ON p.uom_id=u.id
      ORDER BY p.id DESC`
   );
-  res.json(r);
+  // Attach images for every product (was missing — caused images to
+  // disappear from Product Master every time the admin list reloaded)
+  if (products.length) {
+    const ids = products.map(p => p.id);
+    const [images] = await db.query(
+      `SELECT * FROM product_images WHERE product_id IN (?) ORDER BY product_id, sort_order`,
+      [ids]
+    );
+    const byProduct = {};
+    for (const img of images) {
+      (byProduct[img.product_id] ||= []).push(img);
+    }
+    for (const p of products) p.images = byProduct[p.id] || [];
+  }
+  res.json(products);
 }));
 
 app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) => {
