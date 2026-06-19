@@ -144,3 +144,12 @@ ALTER TABLE orders
   ADD COLUMN IF NOT EXISTS tracking_url           VARCHAR(500) DEFAULT NULL;
 
 SELECT 'FIX 10 — Shiprocket columns added to orders ✅' AS status;
+
+--------------------------------------------------------
+
+
+ALTER TABLE product_images
+  MODIFY COLUMN image_url LONGTEXT NOT NULL;
+ 
+ALTER TABLE hero_banners
+  MODIFY COLUMN image_url LONGTEXT NOT NULL;

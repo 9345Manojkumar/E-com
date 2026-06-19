@@ -32,6 +32,13 @@ function errorHandler(err, req, res, _next) {
     return res.status(400).json({ error: 'Referenced record not found.' });
   if (err.code === 'ER_BAD_FIELD_ERROR')
     return res.status(500).json({ error: 'Database column mismatch. Run fix_schema.sql.' });
+  if (err.code === 'ER_DATA_TOO_LONG')
+    return res.status(400).json({
+      error: 'Image or text is too large for the database column. ' +
+             'Run widen_image_columns.sql, or upload smaller images (under 200KB).',
+    });
+  if (err.code === 'ER_NET_PACKET_TOO_LARGE')
+    return res.status(413).json({ error: 'Upload too large. Please use smaller or fewer images.' });
 
   // JWT errors
   if (err.name === 'JsonWebTokenError')
