@@ -233,6 +233,20 @@ async function sendEmail(toEmail, otp, purpose = 'login') {
       console.log(`✅ Email (Resend) → ${toEmail}`);
       return { success: true, via: 'resend' };
     } catch (e) {
+      // Resend's sandbox sender (onboarding@resend.dev) can ONLY deliver to
+      // the email address you signed up to Resend with — this is a Resend
+      // account restriction, not a bug. Detect it and stop immediately
+      // instead of wasting time falling through to SMTP (also blocked here).
+      const isSandboxRestriction = e.message.includes('only send testing emails')
+                                 || e.message.includes('verify a domain');
+      if (isSandboxRestriction) {
+        console.error(`Resend error: ${e.message}`);
+        console.error('    → You are using Resend\'s sandbox sender (onboarding@resend.dev),');
+        console.error('      which can only deliver to your OWN Resend account email.');
+        console.error('    → FIX: verify a real domain at https://resend.com/domains (takes 5 min,');
+        console.error('      free) then set RESEND_FROM=Palm Legacy <no-reply@yourdomain.com> in .env');
+        return { success: false, error: e.message, reason: 'resend_sandbox_restriction' };
+      }
       console.error(`Resend error: ${e.message} — falling back to SMTP if configured`);
     }
   }
