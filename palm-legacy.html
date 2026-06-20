@@ -1557,6 +1557,13 @@ tr:hover td{background:#fafaf8;}
           <span>Product Images</span>
           <span style="font-size:9px;color:var(--text-light);font-weight:400;font-style:italic">First image = primary · Click thumbnail to reorder · ✕ to remove</span>
         </label>
+        <div class="form-grp" style="margin-bottom:10px">
+          <label>Image Slide Interval (seconds)</label>
+          <input id="pm_slide_sec" type="number" min="1" max="60" step="0.5" placeholder="3"
+                 style="max-width:140px"
+                 title="How many seconds each image shows before auto-advancing to the next. Only applies when this product has 2+ images."/>
+          <span style="font-size:9px;color:var(--text-light);font-style:italic;display:block;margin-top:3px">Leave blank to disable auto-slide (manual ‹ › only). Only matters with 2+ images.</span>
+        </div>
         <!-- Thumbnail grid (images + add button) -->
         <div class="img-thumbs" id="imgThumbs">
           <!-- populated by JS -->
@@ -2015,14 +2022,29 @@ function handleSignup(){
 }
 
 function startOTPFlow(){
-  const id=document.getElementById("loginId").value.trim();
-  if(!id){showToast("⚠️ Enter your mobile number first");return;}
-  otpFlowData={id:id.replace(/\D/g,""),name:null};
-  document.getElementById("otpTarget").textContent="+91 "+id;
-  apiSendOTP(id.replace(/\D/g,""))
+  const raw = document.getElementById("loginId").value.trim();
+  if(!raw){showToast("⚠️ Enter your mobile number or email first");return;}
+
+  // Detect whether the user typed a mobile number or an email address.
+  // Previously this always stripped non-digits, which turned any email
+  // into an empty string and caused "identifier is required" errors.
+  const digitsOnly = raw.replace(/\D/g,"");
+  const isMobile   = /^[6-9]\d{9}$/.test(digitsOnly);
+  const isEmail    = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw);
+
+  if(!isMobile && !isEmail){
+    showToast("⚠️ Enter a valid 10-digit mobile number or email address");
+    return;
+  }
+
+  const identifier = isMobile ? digitsOnly : raw.toLowerCase();
+  otpFlowData={id:identifier,name:null};
+  document.getElementById("otpTarget").textContent = isMobile ? ("+91 "+identifier) : identifier;
+
+  apiSendOTP(identifier)
     .then(res=>{
       goAuthStep(2);
-      showToast("📱 OTP: "+res.otp_demo+" — check your terminal");
+      showToast(res.message || "📱 OTP sent — check your mobile/email");
       ["otp1","otp2","otp3","otp4","otp5","otp6"].forEach(boxId=>{ const el=document.getElementById(boxId); if(el) el.value=""; });
       setTimeout(()=>{ const f=document.getElementById("otp1"); if(f) f.focus(); },150);
     })
@@ -2559,6 +2581,7 @@ async function loadFromAPI(){
       stock:   p.stock || p.stock_units || 0,
       sold:    p.total_sold||0,
       images:  (p.images||[]).map(i=>({src:i.src||i.image_url, primary:i.primary||i.is_primary})),
+      slideSec:p.slide_interval_sec ? parseFloat(p.slide_interval_sec) : null,
       active:  p.is_active!==false && p.is_active!==0
     }));
     CAT_LIST  = categories.map(c=>({ id:c.id, name:c.name, icon:c.icon, bg:c.bg_color }));
@@ -2647,6 +2670,7 @@ async function apiSaveProduct(product, isEdit){
     is_active:     product.active ? 1 : 0,
     tags:          product.tags         || '',
     images:        product.images       || [],
+    slide_interval_sec: product.slideSec || null,
   })});
 }
 
@@ -3617,7 +3641,11 @@ function renderProducts(){
     const cid = "car_"+p.id;
     let imgHtml;
     if(imgs){
-      imgHtml=`<div class="prod-carousel" id="${cid}">
+      // data-slide-sec drives the auto-advance timer set up after render.
+      // Only relevant when there are 2+ images; admin sets this per-product
+      // in Product Master → "Image Slide Interval (seconds)".
+      const slideSecAttr = (imgs.length>1 && p.slideSec) ? ` data-slide-sec="${p.slideSec}"` : "";
+      imgHtml=`<div class="prod-carousel" id="${cid}"${slideSecAttr}>
         <div class="prod-carousel-inner" id="${cid}_inner">
           ${imgs.map(img=>`<div class="prod-carousel-slide"><img src="${img.src}" alt="${p.name}"/></div>`).join("")}
         </div>
@@ -3649,6 +3677,9 @@ function renderProducts(){
         <button class="btn-add" onclick="addToCart(${p.id})">Add to Cart +</button>
       </div></div>`;
   }).join("");
+  // Kick off auto-slide timers for every multi-image product card,
+  // using the per-product interval set in Product Master.
+  startAllProductAutoSlides();
 }
 
 // ── CAROUSEL LOGIC ──
@@ -3672,6 +3703,42 @@ function _applyCarousel(id, slides){
   if(inner) inner.style.transform = `translateX(-${idx*100}%)`;
   const dots = document.getElementById(id+"_dots");
   if(dots) Array.from(dots.children).forEach((d,i)=>d.classList.toggle("active",i===idx));
+}
+
+// ── AUTO-SLIDE — driven by per-product "slide_interval_sec" from Product Master ──
+const _carTimers = {}; // { carouselId: intervalHandle }
+
+function stopAllProductAutoSlides(){
+  Object.values(_carTimers).forEach(clearInterval);
+  for (const k in _carTimers) delete _carTimers[k];
+}
+
+function startAllProductAutoSlides(){
+  stopAllProductAutoSlides(); // clear old timers before re-render to prevent leaks/duplicates
+  document.querySelectorAll('.prod-carousel[data-slide-sec]').forEach(el=>{
+    const id = el.id;
+    const sec = parseFloat(el.getAttribute('data-slide-sec'));
+    if(!id || !sec || sec<=0) return;
+    const inner = document.getElementById(id+'_inner');
+    if(!inner || inner.children.length<2) return;
+
+    _carTimers[id] = setInterval(()=>{
+      const slides = inner.children.length;
+      _carIdx[id] = ((_carIdx[id]||0) + 1) % slides;
+      _applyCarousel(id, slides);
+    }, sec*1000);
+
+    // Pause on hover so the customer can read/stop the slide, resume on mouse leave
+    el.addEventListener('mouseenter', ()=>{ if(_carTimers[id]){ clearInterval(_carTimers[id]); delete _carTimers[id]; } });
+    el.addEventListener('mouseleave', ()=>{
+      if(_carTimers[id]) return; // already running
+      _carTimers[id] = setInterval(()=>{
+        const slides = inner.children.length;
+        _carIdx[id] = ((_carIdx[id]||0) + 1) % slides;
+        _applyCarousel(id, slides);
+      }, sec*1000);
+    });
+  });
 }
 
 // ═══════════════════════════════════════════════════
@@ -5179,6 +5246,7 @@ function openProdModal(id){
   document.getElementById("pm_stk").value=p?p.stock:"";
   document.getElementById("pm_badge").value=p?p.badge:"";
   document.getElementById("pm_active").checked=p?(p.active!==false):true;
+  document.getElementById("pm_slide_sec").value=(p&&p.slideSec)?p.slideSec:"";
   // Populate UOM dropdown
   const uomSel=document.getElementById("pm_uom");
   uomSel.innerHTML=UOM_LIST.map(u=>`<option value="${u.id}" ${p&&p.uomId===u.id?"selected":""}>${u.name} (${u.short})</option>`).join("");
@@ -5202,14 +5270,17 @@ function saveProd(){
   const badge=document.getElementById("pm_badge").value.trim();
   const active=document.getElementById("pm_active").checked;
   const desc=document.getElementById("pm_desc").value.trim();
+  const slideSecRaw=document.getElementById("pm_slide_sec").value;
+  const slideSec=slideSecRaw?parseFloat(slideSecRaw):null;
   if(!name){showAdminToast("⚠️ Product name required");return;}
   if(!price||!mrp){showAdminToast("⚠️ Price and MRP required");return;}
   if(!qty){showAdminToast("⚠️ Quantity required");return;}
+  if(slideSecRaw && (isNaN(slideSec) || slideSec<=0)){showAdminToast("⚠️ Slide interval must be a positive number");return;}
   const images = getCurrentImgs();
   const editId=parseInt(document.getElementById("pm_id").value);
   const prodObj={name,desc,price,mrp,qty,uomId,catId,badge,
                  bc:badge.toLowerCase()==="bestseller"?"bestseller":"",
-                 stock,active,images};
+                 stock,active,images,slideSec};
   if(editId){
     const idx=PRODUCTS.findIndex(p=>p.id===editId);
     if(idx>=0) PRODUCTS[idx]={...PRODUCTS[idx],...prodObj};

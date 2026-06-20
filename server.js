@@ -342,7 +342,7 @@ app.post('/api/auth/signup', authLimiter, asyncHandler(async (req, res) => {
 
 // ✅ FIX: rate-limited, and OTP is now bcrypt-hashed before storage
 app.post('/api/auth/send-otp', otpLimiter, asyncHandler(async (req, res) => {
-  const { identifier, purpose = 'login' } = req.body;
+  const { identifier, email: bodyEmail, purpose = 'login' } = req.body;
   if (!identifier) throw new AppError('identifier is required.', 400);
 
   const validPurposes = ['login', 'signup', 'reset'];
@@ -364,18 +364,29 @@ app.post('/api/auth/send-otp', otpLimiter, asyncHandler(async (req, res) => {
     [identifier, hashedOTP, purpose, exp, req.ip]
   );
 
-  // Resolve mobile + email from identifier
+  // Resolve mobile + email from identifier.
+  // For SIGNUP, the user doesn't exist in the DB yet, so a DB lookup
+  // returns nothing — we must trust the email passed directly in the
+  // request body (bodyEmail) instead of relying only on a DB join.
+  // For LOGIN/RESET, the user already exists, so we still try the DB
+  // lookup as a convenience (e.g. mobile-only login still emails them
+  // if they have an email on file).
   const isMobile = /^[6-9]\d{9}$/.test(identifier.replace(/\D/g, ''));
   let mobile = null, email = null;
+
   if (isMobile) {
     mobile = identifier.replace(/\D/g, '');
     const [r] = await db.query('SELECT email FROM users WHERE mobile=? LIMIT 1', [mobile]);
-    if (r.length && r[0].email) email = r[0].email;
+    email = (r.length && r[0].email) ? r[0].email : (bodyEmail || null);
   } else {
     email = identifier;
     const [r] = await db.query('SELECT mobile FROM users WHERE email=? LIMIT 1', [identifier]);
     if (r.length && r[0].mobile) mobile = r[0].mobile;
   }
+
+  // If caller explicitly passed an email and we still don't have one
+  // (covers any edge case above), fall back to it.
+  if (!email && bodyEmail) email = bodyEmail;
 
   dispatchOTP(mobile, email, plainOTP, purpose);
   const channels = [...(mobile ? ['SMS', 'WhatsApp'] : []), ...(email ? ['Email'] : [])];
@@ -874,14 +885,17 @@ app.post('/api/admin/products', auth, adminOnly, asyncHandler(async (req, res) =
   const is_bestseller= (b.is_bestseller === 1 || b.is_bestseller === true) ? 1 : 0;
   const is_active    = (b.is_active    === 0 || b.is_active    === false)  ? 0 : 1;
   const tags         = b.tags || '';
+  // How many seconds each image shows before auto-advancing on the shop page.
+  // null/0 = no auto-slide (manual prev/next only).
+  const slide_interval_sec = b.slide_interval_sec ? parseFloat(b.slide_interval_sec) : null;
 
   const [r] = await db.query(
     `INSERT INTO products
        (name,description,category_id,uom_id,price,mrp,weight_grams,
-        stock,badge_label,is_bestseller,is_active,tags)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+        stock,badge_label,is_bestseller,is_active,tags,slide_interval_sec)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [name, description, category_id, uom_id, price, mrp, weight_grams,
-     stock, badge_label, is_bestseller, is_active, tags]
+     stock, badge_label, is_bestseller, is_active, tags, slide_interval_sec]
   );
 
   // Save images if provided
@@ -922,15 +936,17 @@ app.put('/api/admin/products/:id', auth, adminOnly, asyncHandler(async (req, res
   const is_bestseller= (b.is_bestseller === 1 || b.is_bestseller === true) ? 1 : 0;
   const is_active    = (b.is_active    === 0 || b.is_active    === false)  ? 0 : 1;
   const tags         = b.tags || '';
+  const slide_interval_sec = b.slide_interval_sec ? parseFloat(b.slide_interval_sec) : null;
 
   await db.query(
     `UPDATE products
      SET name=?,description=?,category_id=?,uom_id=?,price=?,mrp=?,
-         weight_grams=?,stock=?,badge_label=?,is_bestseller=?,is_active=?,tags=?
+         weight_grams=?,stock=?,badge_label=?,is_bestseller=?,is_active=?,tags=?,
+         slide_interval_sec=?
      WHERE id=?`,
     [name, description, category_id, uom_id, price, mrp,
      weight_grams, stock, badge_label, is_bestseller, is_active, tags,
-     req.params.id]
+     slide_interval_sec, req.params.id]
   );
 
   // Update images if provided

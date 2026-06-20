@@ -153,3 +153,9 @@ ALTER TABLE product_images
  
 ALTER TABLE hero_banners
   MODIFY COLUMN image_url LONGTEXT NOT NULL;
+
+-----------------For sliding product------------------------------------
+
+ALTER TABLE products
+  ADD COLUMN slide_interval_sec DECIMAL(4,1) NULL DEFAULT NULL
+  COMMENT 'Seconds between auto-slide image transitions on shop page. NULL = disabled.';
