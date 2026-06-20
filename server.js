@@ -191,9 +191,27 @@ function emailTemplate(otp, purpose) {
 }
 
 // Send via Resend's HTTPS API — works on Render, Railway, any host.
+//
+// IMPORTANT: RESEND_FROM must be an address on a domain YOU verified at
+// resend.com/domains (e.g. no-reply@palmlegacy.com). It must NEVER be a
+// gmail.com / yahoo.com / outlook.com address — Resend will always reject
+// those because you cannot prove ownership of someone else's domain.
+//
+// We deliberately do NOT fall back to SMTP_FROM here, because SMTP_FROM
+// is usually a personal Gmail address (correct for SMTP, invalid for
+// Resend) — using it silently caused exactly this bug. If RESEND_FROM
+// isn't set, we fall back to Resend's own sandbox address instead, which
+// at least sends successfully (to your own Resend signup email only).
 async function sendEmailViaResend(toEmail, subject, html) {
   const apiKey = process.env.RESEND_API_KEY;
-  const from   = process.env.RESEND_FROM || process.env.SMTP_FROM || 'Palm Legacy <onboarding@resend.dev>';
+  const from   = process.env.RESEND_FROM || 'Palm Legacy <onboarding@resend.dev>';
+
+  if (!process.env.RESEND_FROM) {
+    console.warn('⚠️  RESEND_FROM is not set — using Resend\'s sandbox sender.');
+    console.warn('    This can ONLY deliver to your own Resend account email.');
+    console.warn('    Set RESEND_FROM=Palm Legacy <name@yourverifieddomain.com> to fix.');
+  }
+
   const resp = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
@@ -239,6 +257,8 @@ async function sendEmail(toEmail, otp, purpose = 'login') {
       // instead of wasting time falling through to SMTP (also blocked here).
       const isSandboxRestriction = e.message.includes('only send testing emails')
                                  || e.message.includes('verify a domain');
+      const isUnverifiedDomain   = e.message.includes('domain is not verified');
+
       if (isSandboxRestriction) {
         console.error(`Resend error: ${e.message}`);
         console.error('    → You are using Resend\'s sandbox sender (onboarding@resend.dev),');
@@ -247,6 +267,19 @@ async function sendEmail(toEmail, otp, purpose = 'login') {
         console.error('      free) then set RESEND_FROM=Palm Legacy <no-reply@yourdomain.com> in .env');
         return { success: false, error: e.message, reason: 'resend_sandbox_restriction' };
       }
+
+      if (isUnverifiedDomain) {
+        console.error(`Resend error: ${e.message}`);
+        console.error(`    → RESEND_FROM is set to "${process.env.RESEND_FROM || '(not set)'}".`);
+        console.error('    → You can ONLY send from a domain you verified at resend.com/domains.');
+        console.error('    → You CANNOT use gmail.com / yahoo.com / outlook.com — nobody can verify');
+        console.error('      those, since they belong to Google/Yahoo/Microsoft, not you.');
+        console.error('    → FIX: either (a) verify your own domain and set RESEND_FROM to');
+        console.error('      name@yourdomain.com, or (b) remove RESEND_FROM entirely to use');
+        console.error('      Resend\'s sandbox sender (only emails your own Resend signup address).');
+        return { success: false, error: e.message, reason: 'resend_unverified_domain' };
+      }
+
       console.error(`Resend error: ${e.message} — falling back to SMTP if configured`);
     }
   }
