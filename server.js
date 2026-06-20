@@ -156,49 +156,103 @@ async function sendSMS(mobile, otp) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// OTP — Channel 2: Email via Nodemailer
-// .env: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+// OTP — Channel 2: Email
+//
+// IMPORTANT — Render (and many cloud hosts) BLOCK outbound SMTP ports
+// 25/465/587 by default to prevent spam abuse. This is a platform-level
+// network rule, not a bug in this code — Gmail SMTP will ALWAYS time out
+// on Render even with perfectly correct credentials.
+//
+// FIX: Resend (https://resend.com) sends email over a normal HTTPS POST
+// request on port 443, which is never blocked. We try Resend first if
+// configured; otherwise we fall back to SMTP (works fine for local dev).
+//
+// .env (pick ONE):
+//   RESEND_API_KEY=re_xxxxxxxx        ← works on Render, free tier available
+//   SMTP_HOST/PORT/USER/PASS/FROM     ← works locally, BLOCKED on Render
 // ═══════════════════════════════════════════════════════════════════════════
+
+function emailTemplate(otp, purpose) {
+  const titles = { signup: 'Verify Your Account', login: 'Your Login OTP', reset: 'Password Reset OTP' };
+  return `<div style="font-family:Georgia,serif;max-width:520px;margin:auto;border:1px solid #e8d5a3;border-radius:12px;overflow:hidden">
+    <div style="background:linear-gradient(135deg,#1B4D1E,#2d7a32);padding:28px;text-align:center">
+      <h1 style="color:#D4940A;font-size:26px;margin:0">🌴 PALM LEGACY</h1>
+      <p style="color:rgba(255,255,255,.8);margin:6px 0 0;font-size:13px">Pure Palm Jaggery from Tamil Nadu</p>
+    </div>
+    <div style="padding:32px;background:#fffef9;text-align:center">
+      <h2 style="color:#1B4D1E;font-size:18px;margin:0 0 16px">${titles[purpose] || 'Your OTP'}</h2>
+      <div style="font-size:44px;font-weight:900;letter-spacing:14px;color:#1B4D1E;background:#f5f0e8;border-radius:12px;padding:18px 24px;display:inline-block;margin:0 0 20px">${otp}</div>
+      <p style="color:#555;font-size:14px;margin:0 0 8px">Valid for <strong>10 minutes</strong>. Do not share this with anyone.</p>
+    </div>
+    <div style="background:#f9f4ec;padding:14px;text-align:center;border-top:1px solid #e8d5a3">
+      <p style="color:#aaa;font-size:11px;margin:0">© Palm Legacy · Pure Palm Jaggery · Tamil Nadu</p>
+    </div>
+  </div>`;
+}
+
+// Send via Resend's HTTPS API — works on Render, Railway, any host.
+async function sendEmailViaResend(toEmail, subject, html) {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from   = process.env.RESEND_FROM || process.env.SMTP_FROM || 'Palm Legacy <onboarding@resend.dev>';
+  const resp = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ from, to: [toEmail], subject, html }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.message || `Resend API error (${resp.status})`);
+  return data;
+}
+
+// Send via SMTP/Nodemailer — works locally, BLOCKED on Render by default.
+async function sendEmailViaSMTP(toEmail, subject, html) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) throw new Error('SMTP not configured');
+  const nm = require('nodemailer');
+  const t = nm.createTransport({
+    host: SMTP_HOST, port: parseInt(SMTP_PORT, 10) || 587,
+    secure: parseInt(SMTP_PORT, 10) === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+    connectionTimeout: 8000, // fail fast instead of hanging for minutes
+    greetingTimeout:   8000,
+    socketTimeout:     8000,
+  });
+  await t.sendMail({ from: SMTP_FROM, to: toEmail, subject, html });
+}
+
 async function sendEmail(toEmail, otp, purpose = 'login') {
   if (!toEmail) return { success: false };
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.log(`[EMAIL] Not configured — OTP for ${toEmail}: ${otp}`);
-    return { success: false, reason: 'SMTP not configured' };
-  }
-  const nm = (() => { try { return require('nodemailer'); } catch { return null; } })();
-  if (!nm) return { success: false, reason: 'nodemailer not installed' };
   const titles = { signup: 'Verify Your Account', login: 'Your Login OTP', reset: 'Password Reset OTP' };
-  try {
-    const t = nm.createTransport({
-      host: SMTP_HOST, port: parseInt(SMTP_PORT, 10) || 587,
-      secure: parseInt(SMTP_PORT, 10) === 465,
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-    await t.sendMail({
-      from: SMTP_FROM, to: toEmail,
-      subject: `Palm Legacy — ${titles[purpose] || 'OTP'}`,
-      html: `<div style="font-family:Georgia,serif;max-width:520px;margin:auto;border:1px solid #e8d5a3;border-radius:12px;overflow:hidden">
-        <div style="background:linear-gradient(135deg,#1B4D1E,#2d7a32);padding:28px;text-align:center">
-          <h1 style="color:#D4940A;font-size:26px;margin:0">🌴 PALM LEGACY</h1>
-          <p style="color:rgba(255,255,255,.8);margin:6px 0 0;font-size:13px">Pure Palm Jaggery from Tamil Nadu</p>
-        </div>
-        <div style="padding:32px;background:#fffef9;text-align:center">
-          <h2 style="color:#1B4D1E;font-size:18px;margin:0 0 16px">${titles[purpose] || 'Your OTP'}</h2>
-          <div style="font-size:44px;font-weight:900;letter-spacing:14px;color:#1B4D1E;background:#f5f0e8;border-radius:12px;padding:18px 24px;display:inline-block;margin:0 0 20px">${otp}</div>
-          <p style="color:#555;font-size:14px;margin:0 0 8px">Valid for <strong>10 minutes</strong>. Do not share this with anyone.</p>
-        </div>
-        <div style="background:#f9f4ec;padding:14px;text-align:center;border-top:1px solid #e8d5a3">
-          <p style="color:#aaa;font-size:11px;margin:0">© Palm Legacy · Pure Palm Jaggery · Tamil Nadu</p>
-        </div>
-      </div>`,
-    });
-    console.log(`✅ Email → ${toEmail}`);
-    return { success: true };
-  } catch (e) {
-    console.error(`Email error: ${e.message}`);
-    return { success: false, error: e.message };
+  const subject = `Palm Legacy — ${titles[purpose] || 'OTP'}`;
+  const html    = emailTemplate(otp, purpose);
+
+  // Prefer Resend (HTTPS — works on Render). Fall back to SMTP (local dev).
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendEmailViaResend(toEmail, subject, html);
+      console.log(`✅ Email (Resend) → ${toEmail}`);
+      return { success: true, via: 'resend' };
+    } catch (e) {
+      console.error(`Resend error: ${e.message} — falling back to SMTP if configured`);
+    }
   }
+
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try {
+      await sendEmailViaSMTP(toEmail, subject, html);
+      console.log(`✅ Email (SMTP) → ${toEmail}`);
+      return { success: true, via: 'smtp' };
+    } catch (e) {
+      console.error(`Email error: ${e.message}`);
+      if (e.message.includes('Timeout') || e.code === 'ETIMEDOUT' || e.code === 'ESOCKET')
+        console.error('    → SMTP ports (587/465/25) are blocked on Render and most cloud hosts.');
+      console.error('    → Add RESEND_API_KEY in your .env / Render dashboard to fix this permanently.');
+      return { success: false, error: e.message };
+    }
+  }
+
+  console.log(`[EMAIL] Not configured — OTP for ${toEmail}: ${otp}`);
+  return { success: false, reason: 'No email provider configured' };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -649,33 +703,32 @@ app.post('/api/orders', auth, orderLimiter, asyncHandler(async (req, res) => {
 }));
 
 async function sendOrderConfirmEmail(toEmail, name, orderNum, total, items) {
-  const { SMTP_HOST, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) return;
-  const nm = (() => { try { return require('nodemailer'); } catch { return null; } })();
-  if (!nm) return;
-  const t = nm.createTransport({
-    host: process.env.SMTP_HOST, port: parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: parseInt(process.env.SMTP_PORT, 10) === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-  });
+  if (!toEmail) return;
   const rows = items.map(i =>
     `<tr><td style="padding:6px 10px">${i.name}</td><td style="padding:6px 10px;text-align:center">${i.qty}</td><td style="padding:6px 10px;text-align:right">₹${(i.price * i.qty).toFixed(2)}</td></tr>`
   ).join('');
-  await t.sendMail({
-    from: process.env.SMTP_FROM, to: toEmail,
-    subject: `Order Confirmed — ${orderNum} | Palm Legacy`,
-    html: `<div style="font-family:Georgia,serif;max-width:600px;margin:auto;border:1px solid #e8d5a3;border-radius:12px;overflow:hidden">
-      <div style="background:linear-gradient(135deg,#1B4D1E,#2d7a32);padding:28px;text-align:center"><h1 style="color:#D4940A;font-size:24px;margin:0">🌴 PALM LEGACY</h1></div>
-      <div style="padding:28px;background:#fffef9">
-        <h2 style="color:#1B4D1E;margin:0 0 16px">✅ Order Confirmed, ${name}!</h2>
-        <p style="color:#555;margin:0 0 20px">Order <strong>${orderNum}</strong> placed successfully.</p>
-        <table width="100%" style="border-collapse:collapse;border:1px solid #e8d5a3">
-          <thead><tr style="background:#f5f0e8"><th style="padding:10px;text-align:left">Item</th><th style="padding:10px;text-align:center">Qty</th><th style="padding:10px;text-align:right">Total</th></tr></thead>
-          <tbody>${rows}</tbody>
-          <tfoot><tr style="background:#f5f0e8;font-weight:bold"><td colspan="2" style="padding:10px">Order Total</td><td style="padding:10px;text-align:right">₹${total}</td></tr></tfoot>
-        </table>
-      </div></div>`,
-  }).catch(e => console.error('Order confirm email error:', e.message));
+  const subject = `Order Confirmed — ${orderNum} | Palm Legacy`;
+  const html = `<div style="font-family:Georgia,serif;max-width:600px;margin:auto;border:1px solid #e8d5a3;border-radius:12px;overflow:hidden">
+    <div style="background:linear-gradient(135deg,#1B4D1E,#2d7a32);padding:28px;text-align:center"><h1 style="color:#D4940A;font-size:24px;margin:0">🌴 PALM LEGACY</h1></div>
+    <div style="padding:28px;background:#fffef9">
+      <h2 style="color:#1B4D1E;margin:0 0 16px">✅ Order Confirmed, ${name}!</h2>
+      <p style="color:#555;margin:0 0 20px">Order <strong>${orderNum}</strong> placed successfully.</p>
+      <table width="100%" style="border-collapse:collapse;border:1px solid #e8d5a3">
+        <thead><tr style="background:#f5f0e8"><th style="padding:10px;text-align:left">Item</th><th style="padding:10px;text-align:center">Qty</th><th style="padding:10px;text-align:right">Total</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr style="background:#f5f0e8;font-weight:bold"><td colspan="2" style="padding:10px">Order Total</td><td style="padding:10px;text-align:right">₹${total}</td></tr></tfoot>
+      </table>
+    </div></div>`;
+
+  // Same dual-mode strategy as OTP emails: Resend (HTTPS) first, SMTP fallback.
+  if (process.env.RESEND_API_KEY) {
+    try { await sendEmailViaResend(toEmail, subject, html); return; }
+    catch (e) { console.error('Resend order-confirm error:', e.message); }
+  }
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    try { await sendEmailViaSMTP(toEmail, subject, html); }
+    catch (e) { console.error('Order confirm email error:', e.message); }
+  }
 }
 
 app.get('/api/orders/my', auth, asyncHandler(async (req, res) => {
@@ -1659,7 +1712,8 @@ app.listen(PORT, async () => {
   console.log(bar);
 
   const checks = [
-    [env('SMTP_HOST') && env('SMTP_USER'),   '✅  Email OTP',    env('SMTP_HOST'), '⚠️   Email OTP   → add SMTP_HOST / SMTP_USER / SMTP_PASS'],
+    [env('RESEND_API_KEY'),                  '✅  Email OTP  → Resend (works on Render)', null,
+       env('SMTP_HOST') && env('SMTP_USER') ? '✅  Email OTP  → SMTP (local only — blocked on Render!)' : '⚠️   Email OTP   → add RESEND_API_KEY (recommended) or SMTP_HOST/USER/PASS'],
     [env('MSG91_AUTH_KEY'),                  '✅  SMS OTP    → MSG91', null,       '⚠️   SMS OTP     → add MSG91_AUTH_KEY / MSG91_TEMPLATE_ID'],
     [env('WATI_API_URL'),                    '✅  WhatsApp   → WATI',  null,       env('TWILIO_ACCOUNT_SID') ? '✅  WhatsApp   → Twilio' : env('GUPSHUP_API_KEY') ? '✅  WhatsApp   → Gupshup' : '⚠️   WhatsApp   → not configured'],
     [env('RAZORPAY_KEY_ID'),                 `✅  Razorpay   → ${env('RAZORPAY_KEY_ID')}`, null, '⚠️   Razorpay   → add RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET'],
