@@ -49,6 +49,8 @@ const db      = require('./db/connection');
 // ── project middleware ────────────────────────────────────────────────────
 const { asyncHandler, AppError, errorHandler } = require('./middleware/errorHandler');
 const shiprocket = require('./services/shiprocket');
+const { parseUserAgent, parseReferrerDomain } = require('./services/uaParser');
+const { lookupGeo } = require('./services/geoLookup');
 const { auth, adminOnly }                       = require('./middleware/auth');
 const { otpLimiter, authLimiter, apiLimiter, orderLimiter } = require('./middleware/rateLimiter');
 const { validateBody, patterns, trim, posDec }  = require('./middleware/validate');
@@ -1717,6 +1719,217 @@ async function pollShiprocketDeliveries() {
 // ═══════════════════════════════════════════════════════════════════════════
 // STATIC FILES
 // ═══════════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════════
+// WEBSITE ANALYTICS & VISITOR TRACKING
+// .env flags:
+//   TRACK_IP=true|false   — whether to store raw IP addresses (default: true)
+// ═══════════════════════════════════════════════════════════════════════════
+
+const TRACK_IP = env('TRACK_IP') !== 'false'; // store IPs by default; set false to disable for privacy
+
+function getClientIP(req) {
+  // req.ip already respects 'trust proxy' setting configured above
+  return (req.ip || '').replace('::ffff:', '');
+}
+
+// ── PUBLIC: start or resume a visitor session ──────────────────────────────
+// Called once per browser tab/session on page load. Returns session_id which
+// the frontend stores in sessionStorage and reuses for all subsequent calls.
+app.post('/api/track/session', apiLimiter, asyncHandler(async (req, res) => {
+  const { visitor_uid, page_path, page_title, referrer } = req.body;
+  if (!visitor_uid) throw new AppError('visitor_uid is required.', 400);
+
+  const ip = TRACK_IP ? getClientIP(req) : null;
+  const ua = parseUserAgent(req.headers['user-agent']);
+  const geo = TRACK_IP ? await lookupGeo(ip) : { country: null, region: null, city: null };
+  const referrerDomain = parseReferrerDomain(referrer);
+  const now = new Date();
+
+  const [r] = await db.query(
+    `INSERT INTO visitor_sessions
+       (visitor_uid, ip_address, country, region, city, device_type, browser,
+        browser_version, os, referrer, referrer_domain, landing_page,
+        entry_at, last_seen_at, page_view_count, is_bounce)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,1)`,
+    [trim(visitor_uid, 64), ip, geo.country, geo.region, geo.city,
+     ua.device_type, ua.browser, ua.browser_version, ua.os,
+     trim(referrer || '', 500) || null, referrerDomain,
+     trim(page_path || '/', 300), now, now]
+  );
+
+  await db.query(
+    'INSERT INTO page_views (session_id, page_path, page_title, viewed_at) VALUES (?,?,?,?)',
+    [r.insertId, trim(page_path || '/', 300), trim(page_title || '', 200), now]
+  );
+
+  res.status(201).json({ session_id: r.insertId });
+}));
+
+// ── PUBLIC: record a new page view within an existing session ──────────────
+app.post('/api/track/pageview', apiLimiter, asyncHandler(async (req, res) => {
+  const { session_id, page_path, page_title } = req.body;
+  if (!session_id || !page_path) throw new AppError('session_id and page_path are required.', 400);
+
+  await db.query(
+    'INSERT INTO page_views (session_id, page_path, page_title, viewed_at) VALUES (?,?,?,NOW())',
+    [session_id, trim(page_path, 300), trim(page_title || '', 200)]
+  );
+  await db.query(
+    `UPDATE visitor_sessions
+     SET page_view_count = page_view_count + 1, is_bounce = 0, last_seen_at = NOW()
+     WHERE id = ?`,
+    [session_id]
+  );
+  res.json({ ok: true });
+}));
+
+// ── PUBLIC: heartbeat — keeps session_duration_sec accurate ────────────────
+// Frontend pings this every ~15s while the tab is open/focused.
+app.post('/api/track/heartbeat', apiLimiter, asyncHandler(async (req, res) => {
+  const { session_id, active_sec } = req.body;
+  if (!session_id) throw new AppError('session_id is required.', 400);
+
+  await db.query(
+    `UPDATE visitor_sessions
+     SET session_duration_sec = session_duration_sec + ?, last_seen_at = NOW()
+     WHERE id = ?`,
+    [Math.max(1, Math.min(60, parseInt(active_sec, 10) || 15)), session_id]
+  );
+  res.json({ ok: true });
+}));
+
+// ── ADMIN: dashboard summary cards ──────────────────────────────────────────
+app.get('/api/admin/analytics/summary', auth, adminOnly, asyncHandler(async (req, res) => {
+  const { from, to } = req.query;
+  const dateFilter = from && to ? 'WHERE DATE(entry_at) BETWEEN ? AND ?' : '';
+  const params = from && to ? [from, to] : [];
+
+  const [[totals]] = await db.query(
+    `SELECT
+       COUNT(*)                                  AS total_sessions,
+       COUNT(DISTINCT visitor_uid)                AS unique_visitors,
+       SUM(page_view_count)                       AS total_page_views,
+       ROUND(AVG(session_duration_sec),0)         AS avg_session_sec,
+       ROUND(100 * SUM(is_bounce) / NULLIF(COUNT(*),0), 1) AS bounce_rate_pct
+     FROM visitor_sessions ${dateFilter}`,
+    params
+  );
+
+  // Returning visitors = visitor_uids that have more than 1 session ever
+  const [[returning]] = await db.query(
+    `SELECT COUNT(*) AS returning_visitors FROM (
+       SELECT visitor_uid FROM visitor_sessions
+       GROUP BY visitor_uid HAVING COUNT(*) > 1
+     ) t`
+  );
+
+  // Active users = sessions seen in the last 5 minutes
+  const [[active]] = await db.query(
+    `SELECT COUNT(DISTINCT visitor_uid) AS active_now
+     FROM visitor_sessions WHERE last_seen_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)`
+  );
+
+  const [topSource] = await db.query(
+    `SELECT COALESCE(NULLIF(referrer_domain,''),'Direct') AS source, COUNT(*) AS sessions
+     FROM visitor_sessions ${dateFilter}
+     GROUP BY source ORDER BY sessions DESC LIMIT 1`,
+    params
+  );
+
+  res.json({
+    total_visitors:     totals.unique_visitors || 0,
+    total_sessions:     totals.total_sessions || 0,
+    returning_visitors: returning.returning_visitors || 0,
+    new_visitors:       Math.max(0, (totals.unique_visitors||0) - (returning.returning_visitors||0)),
+    total_page_views:   totals.total_page_views || 0,
+    avg_session_sec:    totals.avg_session_sec || 0,
+    bounce_rate_pct:    totals.bounce_rate_pct || 0,
+    active_now:         active.active_now || 0,
+    top_source:         topSource[0]?.source || 'Direct',
+  });
+}));
+
+// ── ADMIN: traffic trend (daily/weekly/monthly), for charts ────────────────
+app.get('/api/admin/analytics/trend', auth, adminOnly, asyncHandler(async (req, res) => {
+  const granularity = ['daily','weekly','monthly'].includes(req.query.granularity) ? req.query.granularity : 'daily';
+  const days = { daily: 30, weekly: 90, monthly: 365 }[granularity];
+
+  const groupExpr = {
+    daily:   'DATE(entry_at)',
+    weekly:  'DATE(DATE_SUB(entry_at, INTERVAL WEEKDAY(entry_at) DAY))',
+    monthly: "DATE_FORMAT(entry_at, '%Y-%m-01')",
+  }[granularity];
+
+  const [rows] = await db.query(
+    `SELECT
+       ${groupExpr} AS period,
+       COUNT(*) AS sessions,
+       COUNT(DISTINCT visitor_uid) AS unique_visitors,
+       SUM(page_view_count) AS page_views,
+       ROUND(100 * SUM(is_bounce) / NULLIF(COUNT(*),0), 1) AS bounce_rate_pct
+     FROM visitor_sessions
+     WHERE entry_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+     GROUP BY period ORDER BY period ASC`,
+    [days]
+  );
+  res.json(rows);
+}));
+
+// ── ADMIN: most visited pages ───────────────────────────────────────────────
+app.get('/api/admin/analytics/top-pages', auth, adminOnly, asyncHandler(async (req, res) => {
+  const [rows] = await db.query('SELECT * FROM v_top_pages LIMIT 15');
+  res.json(rows);
+}));
+
+// ── ADMIN: device / browser / OS breakdown ──────────────────────────────────
+app.get('/api/admin/analytics/breakdown', auth, adminOnly, asyncHandler(async (req, res) => {
+  const [devices]   = await db.query('SELECT * FROM v_device_breakdown');
+  const [browsers]  = await db.query('SELECT browser, COUNT(*) sessions FROM visitor_sessions GROUP BY browser ORDER BY sessions DESC LIMIT 8');
+  const [oses]      = await db.query('SELECT os, COUNT(*) sessions FROM visitor_sessions GROUP BY os ORDER BY sessions DESC LIMIT 8');
+  const [countries] = await db.query("SELECT COALESCE(country,'Unknown') country, COUNT(*) sessions FROM visitor_sessions GROUP BY country ORDER BY sessions DESC LIMIT 10");
+  const [referrers]  = await db.query('SELECT * FROM v_top_referrers LIMIT 10');
+  res.json({ devices, browsers, oses, countries, referrers });
+}));
+
+// ── ADMIN: visitor log table — search, sort, paginate, date filter ─────────
+app.get('/api/admin/analytics/visitors', auth, adminOnly, asyncHandler(async (req, res) => {
+  const page     = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageSize = Math.min(100, Math.max(10, parseInt(req.query.pageSize, 10) || 25));
+  const offset   = (page - 1) * pageSize;
+  const search   = trim(req.query.search || '', 100);
+  const from     = req.query.from;
+  const to       = req.query.to;
+  const sortCol  = ['entry_at','session_duration_sec','page_view_count','device_type','country']
+                      .includes(req.query.sortCol) ? req.query.sortCol : 'entry_at';
+  const sortDir  = req.query.sortDir === 'asc' ? 'ASC' : 'DESC';
+
+  const where = [];
+  const params = [];
+  if (search) {
+    where.push('(country LIKE ? OR city LIKE ? OR browser LIKE ? OR os LIKE ? OR ip_address LIKE ? OR landing_page LIKE ?)');
+    const like = `%${search}%`;
+    params.push(like, like, like, like, like, like);
+  }
+  if (from && to) { where.push('DATE(entry_at) BETWEEN ? AND ?'); params.push(from, to); }
+  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const [[{ total }]] = await db.query(
+    `SELECT COUNT(*) total FROM visitor_sessions ${whereSql}`, params
+  );
+
+  const [rows] = await db.query(
+    `SELECT id, visitor_uid, ip_address, country, region, city, device_type,
+            browser, browser_version, os, referrer_domain, landing_page,
+            entry_at, last_seen_at, session_duration_sec, page_view_count, is_bounce
+     FROM visitor_sessions ${whereSql}
+     ORDER BY ${sortCol} ${sortDir}
+     LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  );
+
+  res.json({ rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+}));
+
 // Serve palm-legacy.html for root URL — BEFORE express.static
 // so index.html doesn't intercept /
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'palm-legacy.html')));

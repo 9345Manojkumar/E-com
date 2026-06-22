@@ -159,3 +159,93 @@ ALTER TABLE hero_banners
 ALTER TABLE products
   ADD COLUMN slide_interval_sec DECIMAL(4,1) NULL DEFAULT NULL
   COMMENT 'Seconds between auto-slide image transitions on shop page. NULL = disabled.';
+
+-----------------For website visiter--------------------------------------
+
+
+CREATE TABLE IF NOT EXISTS visitor_sessions (
+  id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+  visitor_uid         VARCHAR(64)  NOT NULL,        -- random ID from browser localStorage
+  user_id             INT          NULL,            -- linked once visitor logs in
+  ip_address          VARCHAR(64)  NULL,             -- nullable — respects TRACK_IP flag
+  country             VARCHAR(100) NULL,
+  region              VARCHAR(100) NULL,
+  city                VARCHAR(100) NULL,
+  device_type         ENUM('mobile','tablet','desktop','other') NOT NULL DEFAULT 'other',
+  browser             VARCHAR(60)  NULL,
+  browser_version     VARCHAR(20)  NULL,
+  os                  VARCHAR(60)  NULL,
+  referrer            VARCHAR(500) NULL,             -- where the visitor came from
+  referrer_domain     VARCHAR(200) NULL,              -- parsed domain, e.g. "google.com"
+  landing_page        VARCHAR(300) NULL,              -- first page seen
+  entry_at            DATETIME     NOT NULL,
+  last_seen_at        DATETIME     NOT NULL,          -- updated by heartbeat pings
+  session_duration_sec INT         NOT NULL DEFAULT 0, -- updated by heartbeat pings
+  page_view_count     INT          NOT NULL DEFAULT 1,
+  is_bounce           TINYINT(1)   NOT NULL DEFAULT 1, -- 1 = left after 1 page view, 0 = browsed more
+  created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  INDEX idx_visitor_uid   (visitor_uid),
+  INDEX idx_entry_at      (entry_at),
+  INDEX idx_user_id       (user_id),
+  INDEX idx_device_type   (device_type),
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-------
+CREATE TABLE IF NOT EXISTS page_views (
+  id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+  session_id    BIGINT       NOT NULL,
+  page_path     VARCHAR(300) NOT NULL,    -- e.g. "/", "#products", "/admin"
+  page_title    VARCHAR(200) NULL,
+  viewed_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  time_on_page_sec INT       NOT NULL DEFAULT 0,  -- updated when visitor navigates away
+
+  INDEX idx_session_id  (session_id),
+  INDEX idx_page_path   (page_path),
+  INDEX idx_viewed_at   (viewed_at),
+  FOREIGN KEY (session_id) REFERENCES visitor_sessions(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ════════════════════════════════════════════════════════════════
+-- Useful pre-built views for fast dashboard queries
+-- ════════════════════════════════════════════════════════════════
+
+-- Daily traffic summary — powers the trend charts
+CREATE OR REPLACE VIEW v_daily_traffic AS
+SELECT
+  DATE(entry_at)                              AS visit_date,
+  COUNT(*)                                    AS total_sessions,
+  COUNT(DISTINCT visitor_uid)                 AS unique_visitors,
+  SUM(page_view_count)                        AS total_page_views,
+  ROUND(AVG(session_duration_sec),0)          AS avg_duration_sec,
+  ROUND(100 * SUM(is_bounce) / COUNT(*), 1)   AS bounce_rate_pct
+FROM visitor_sessions
+GROUP BY DATE(entry_at)
+ORDER BY visit_date DESC;
+
+-- Most visited pages — powers "Top Pages" widget
+CREATE OR REPLACE VIEW v_top_pages AS
+SELECT
+  page_path,
+  COUNT(*)                  AS view_count,
+  COUNT(DISTINCT session_id) AS unique_sessions,
+  ROUND(AVG(time_on_page_sec),0) AS avg_time_on_page_sec
+FROM page_views
+GROUP BY page_path
+ORDER BY view_count DESC;
+
+-- Device breakdown — powers the pie chart
+CREATE OR REPLACE VIEW v_device_breakdown AS
+SELECT device_type, COUNT(*) AS sessions
+FROM visitor_sessions
+GROUP BY device_type;
+
+-- Top referrer / traffic sources
+CREATE OR REPLACE VIEW v_top_referrers AS
+SELECT
+  COALESCE(NULLIF(referrer_domain,''), 'Direct') AS source,
+  COUNT(*) AS sessions
+FROM visitor_sessions
+GROUP BY source
+ORDER BY sessions DESC;

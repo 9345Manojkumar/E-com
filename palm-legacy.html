@@ -377,6 +377,8 @@ tr:hover td{background:#fafaf8;}
 .abtn-p{background:var(--brown-dark);color:var(--gold-light);}
 .abtn-p:hover{background:var(--gold);color:var(--brown-dark);}
 .abtn-o{background:none;border:1.5px solid var(--border);color:#555;}
+.vlog-range-btn,.vlog-gran-btn{background:none;border:1.5px solid var(--border);color:#555;}
+.vlog-range-btn.active,.vlog-gran-btn.active{background:var(--brown-dark);border-color:var(--brown-dark);color:#fff;}
 .abtn-o:hover{border-color:var(--gold);color:var(--brown-dark);}
 .abtn-d{background:var(--red-light);color:var(--red);border:1px solid #ffcdd2;}
 .abtn-d:hover{background:var(--red);color:#fff;}
@@ -486,6 +488,13 @@ tr:hover td{background:#fafaf8;}
   .admin-main{margin-left:0;}
   .stats-grid{grid-template-columns:1fr 1fr;}
   .tb-search{display:none;}
+  /* Visitor Analytics — stack multi-column grids on mobile */
+  #apage-visitorlog [style*="grid-template-columns:1.2fr 1fr"],
+  #apage-visitorlog [style*="grid-template-columns:1fr 1fr 1fr"]{
+    grid-template-columns:1fr !important;
+  }
+  #vlogTrendChart{min-width:420px;}
+  .vlog-range-btn,.vlog-gran-btn{font-size:10px;padding:5px 9px;}
 }
 @media(max-width:380px){
   .logo-txt{display:none;}
@@ -1119,6 +1128,7 @@ tr:hover td{background:#fafaf8;}
       <div class="sb-item sb-admin-item" onclick="showAPage('products')" data-page="products" id="nav-products"><span class="si">🟤</span>Products</div>
       <div class="sb-item sb-admin-item" onclick="showAPage('customers')" data-page="customers" id="nav-customers"><span class="si">👥</span>Customers</div>
       <div class="sb-item sb-admin-item" onclick="showAPage('analytics')" data-page="analytics" id="nav-analytics"><span class="si">📈</span>Analytics</div>
+      <div class="sb-item sb-admin-item" onclick="showAPage('visitorlog')" data-page="visitorlog" id="nav-visitorlog"><span class="si">🌐</span>Visitor Analytics</div>
       <div class="sb-item sb-admin-item" onclick="showAPage('reports')" data-page="reports" id="nav-reports"><span class="si">📋</span>Reports</div>
 
       <div class="sb-sec sb-sec-finance">Finance</div>
@@ -1274,6 +1284,105 @@ tr:hover td{background:#fafaf8;}
           </div>
         </div>
         <div id="analyticsDenied" style="display:none"><div class="acc-denied"><div class="adi">🔒</div><h2>Access Restricted</h2><p>Only <strong>Admins</strong> and <strong>Managers</strong> can view analytics.</p></div></div>
+      </div>
+
+      <!-- VISITOR ANALYTICS (admin/manager) -->
+      <div class="apage" id="apage-visitorlog">
+        <div id="visitorlogContent">
+
+          <!-- Filter bar -->
+          <div class="card" style="margin-bottom:16px">
+            <div style="padding:14px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <button class="abtn abtn-sm vlog-range-btn active" data-range="today" onclick="vlogSetRange('today')">Today</button>
+                <button class="abtn abtn-sm vlog-range-btn" data-range="7d" onclick="vlogSetRange('7d')">Last 7 Days</button>
+                <button class="abtn abtn-sm vlog-range-btn" data-range="30d" onclick="vlogSetRange('30d')">Last 30 Days</button>
+                <button class="abtn abtn-sm vlog-range-btn" data-range="90d" onclick="vlogSetRange('90d')">Last 90 Days</button>
+                <button class="abtn abtn-sm vlog-range-btn" data-range="all" onclick="vlogSetRange('all')">All Time</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap">
+                <input type="date" id="vlogFrom" class="ssel" style="width:140px" onchange="vlogCustomRange()"/>
+                <span style="color:var(--text-light);font-size:11px">to</span>
+                <input type="date" id="vlogTo" class="ssel" style="width:140px" onchange="vlogCustomRange()"/>
+                <button class="abtn abtn-o abtn-sm" onclick="buildVisitorLog()">🔄 Refresh</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Summary stat cards -->
+          <div class="stats-grid" id="vlogStatsGrid">
+            <div class="stat-card sc-g"><div class="stat-ico ico-g">👥</div><div class="stat-n" id="vlogTotalVisitors">—</div><div class="stat-l">Total Visitors</div><div class="stat-c" id="vlogActiveNow">● 0 active now</div></div>
+            <div class="stat-card sc-b"><div class="stat-ico ico-b">📄</div><div class="stat-n" id="vlogPageViews">—</div><div class="stat-l">Total Page Views</div><div class="stat-c" id="vlogSessions">0 sessions</div></div>
+            <div class="stat-card sc-gr"><div class="stat-ico ico-gr">⏱️</div><div class="stat-n" id="vlogAvgDuration">—</div><div class="stat-l">Avg. Session Duration</div><div class="stat-c">per visit</div></div>
+            <div class="stat-card sc-r"><div class="stat-ico ico-r">↩️</div><div class="stat-n" id="vlogBounceRate">—</div><div class="stat-l">Bounce Rate</div><div class="stat-c" id="vlogReturning">0 returning</div></div>
+          </div>
+
+          <!-- Traffic trend chart + granularity toggle -->
+          <div class="card" style="margin-bottom:0">
+            <div class="card-head">
+              <h3>Traffic Trend</h3>
+              <div style="display:flex;gap:6px">
+                <button class="abtn abtn-sm vlog-gran-btn active" data-gran="daily" onclick="vlogSetGranularity('daily')">Daily</button>
+                <button class="abtn abtn-sm vlog-gran-btn" data-gran="weekly" onclick="vlogSetGranularity('weekly')">Weekly</button>
+                <button class="abtn abtn-sm vlog-gran-btn" data-gran="monthly" onclick="vlogSetGranularity('monthly')">Monthly</button>
+              </div>
+            </div>
+            <div style="padding:16px;overflow-x:auto">
+              <div class="bar-chart" id="vlogTrendChart" style="min-width:500px"></div>
+            </div>
+          </div>
+
+          <div style="height:16px"></div>
+
+          <!-- Top pages + breakdown widgets -->
+          <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:16px">
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h3>Most Visited Pages</h3></div>
+              <div class="tbl-wrap"><table id="vlogTopPagesTable"></table></div>
+            </div>
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h3>Device Breakdown</h3></div>
+              <div style="padding:16px" id="vlogDeviceBreakdown"></div>
+            </div>
+          </div>
+
+          <div style="height:16px"></div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h3>Browsers</h3></div>
+              <div style="padding:14px" id="vlogBrowserList"></div>
+            </div>
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h3>Operating Systems</h3></div>
+              <div style="padding:14px" id="vlogOsList"></div>
+            </div>
+            <div class="card" style="margin-bottom:0">
+              <div class="card-head"><h3>Top Traffic Sources</h3></div>
+              <div style="padding:14px" id="vlogReferrerList"></div>
+            </div>
+          </div>
+
+          <div style="height:16px"></div>
+
+          <!-- Visitor log table -->
+          <div class="card" style="margin-bottom:0">
+            <div class="card-head">
+              <h3>Visitor Log</h3>
+              <input type="search" class="ssel" id="vlogSearch" placeholder="🔍 Search country, browser, IP…" style="width:220px" oninput="vlogDebounceSearch()"/>
+            </div>
+            <div class="tbl-wrap"><table id="vlogVisitorTable"></table></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-top:1px solid var(--border)">
+              <span style="font-size:11px;color:var(--text-light)" id="vlogPageInfo">—</span>
+              <div style="display:flex;gap:6px">
+                <button class="abtn abtn-o abtn-sm" onclick="vlogChangePage(-1)">‹ Prev</button>
+                <button class="abtn abtn-o abtn-sm" onclick="vlogChangePage(1)">Next ›</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+        <div id="visitorlogDenied" style="display:none"><div class="acc-denied"><div class="adi">🔒</div><h2>Access Restricted</h2><p>Only <strong>Admins</strong> and <strong>Managers</strong> can view visitor analytics.</p></div></div>
       </div>
 
       <!-- REPORTS (admin/manager) -->
@@ -1825,8 +1934,8 @@ let userDB = {}; // populated from MySQL on login
 
 // Permissions by role
 const PERMS={
-  admin:["dashboard","myorders","orders","products","customers","analytics","reports","pricing","ar","ap","inventory","users","settings"],
-  manager:["dashboard","myorders","orders","products","customers","analytics","reports","pricing","ar","ap","inventory"],
+  admin:["dashboard","myorders","orders","products","customers","analytics","visitorlog","reports","pricing","ar","ap","inventory","users","settings"],
+  manager:["dashboard","myorders","orders","products","customers","analytics","visitorlog","reports","pricing","ar","ap","inventory"],
   viewer:["dashboard","myorders","orders","customers","analytics","ar","ap","inventory"],
   customer:["dashboard","myorders"],
 };
@@ -1846,6 +1955,7 @@ function showScreen(id){
   document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
   document.getElementById(id).classList.add("active");
   window.scrollTo(0,0);
+  trackPageView(id==='adminScreen' ? _currentPagePath() : (id==='authScreen' ? '/auth' : '/'));
 }
 function backToShop(){
   // Restore session from saved JWT token
@@ -2345,6 +2455,71 @@ function heroStartAuto(){
 }
 
 // pause on hover
+// ═══════════════════════════════════════════════════════════════════
+// VISITOR ANALYTICS TRACKING
+// Anonymous, cookie-free — uses a random ID stored in localStorage.
+// Tracks: session start, page views, and a 15s heartbeat for accurate
+// "time spent on site" without needing constant polling.
+// ═══════════════════════════════════════════════════════════════════
+let _trackSessionId = null;
+let _trackHeartbeatTimer = null;
+let _trackLastPagePath = null;
+
+function _getVisitorUID(){
+  let uid = localStorage.getItem('pl_visitor_uid');
+  if(!uid){
+    uid = 'v_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2,12);
+    localStorage.setItem('pl_visitor_uid', uid);
+  }
+  return uid;
+}
+
+function _currentPagePath(){
+  // Best-effort readable path for analytics: which screen + which admin page
+  const activeScreen = document.querySelector('.screen.active');
+  if(!activeScreen) return '/';
+  if(activeScreen.id === 'adminScreen'){
+    const activePage = document.querySelector('.apage.active');
+    return activePage ? ('/admin/' + activePage.id.replace('apage-','')) : '/admin';
+  }
+  if(activeScreen.id === 'authScreen') return '/auth';
+  return '/';
+}
+
+function trackInitSession(){
+  const path = _currentPagePath();
+  _trackLastPagePath = path;
+  apiFetch('/track/session', {method:'POST', body: JSON.stringify({
+    visitor_uid: _getVisitorUID(),
+    page_path: path,
+    page_title: document.title,
+    referrer: document.referrer || null,
+  })})
+  .then(res => {
+    _trackSessionId = res.session_id;
+    _trackStartHeartbeat();
+  })
+  .catch(()=>{}); // tracking must never block or break the app
+}
+
+function trackPageView(path){
+  if(!_trackSessionId || path === _trackLastPagePath) return;
+  _trackLastPagePath = path;
+  apiFetch('/track/pageview', {method:'POST', body: JSON.stringify({
+    session_id: _trackSessionId, page_path: path, page_title: document.title,
+  })}).catch(()=>{});
+}
+
+function _trackStartHeartbeat(){
+  clearInterval(_trackHeartbeatTimer);
+  _trackHeartbeatTimer = setInterval(()=>{
+    if(!_trackSessionId || document.hidden) return; // only count active/focused tab time
+    apiFetch('/track/heartbeat', {method:'POST', body: JSON.stringify({
+      session_id: _trackSessionId, active_sec: 15,
+    })}).catch(()=>{});
+  }, 15000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // ── Hero slider hover pause ──
   const s = document.getElementById('heroSlider');
@@ -2374,6 +2549,9 @@ document.addEventListener('DOMContentLoaded', () => {
   showScreen('shopScreen');
   loadBanners();
   detectBackend();
+
+  // ── Start visitor analytics tracking (fire-and-forget, never blocks UI) ──
+  trackInitSession();
 });
 
 // ── Admin banner management ──
@@ -4074,7 +4252,7 @@ function initAdminScreen(){
       header.style.display = anyVisible ? "" : "none";
     }
   });
-  buildDash();buildMyOrders();buildOrders();buildProds();buildCusts();buildAnalytics();buildReports();buildPricing();buildAR();buildAP();buildInventory();buildUsers();buildSettings();
+  buildDash();buildMyOrders();buildOrders();buildProds();buildCusts();buildAnalytics();buildVisitorLog();buildReports();buildPricing();buildAR();buildAP();buildInventory();buildUsers();buildSettings();
   showAPage("dashboard");
   startOrderPolling(); // start 30-second poll for new orders
 }
@@ -4087,12 +4265,15 @@ function showAPage(p){
   document.querySelectorAll(".sb-item").forEach(x=>x.classList.remove("active"));
   document.getElementById("apage-"+p).classList.add("active");
   const el=document.querySelector(`.sb-item[data-page="${p}"]`);if(el)el.classList.add("active");
-  const t={dashboard:"Dashboard",myorders:"My Orders",orders:"All Orders",products:"Products",customers:"Customers",analytics:"Analytics",reports:"Reports",pricing:"Pricing Policy",ar:"AR – Accounts Receivable",ap:"AP – Accounts Payable",inventory:"Inventory Ledger",users:"User Access",settings:"Settings"};
+  const t={dashboard:"Dashboard",myorders:"My Orders",orders:"All Orders",products:"Products",customers:"Customers",analytics:"Analytics",visitorlog:"Visitor Analytics",reports:"Reports",pricing:"Pricing Policy",ar:"AR – Accounts Receivable",ap:"AP – Accounts Payable",inventory:"Inventory Ledger",users:"User Access",settings:"Settings"};
   document.getElementById("aTopbarTitle").textContent=t[p]||p;
+  trackPageView('/admin/' + p);
   // Mark all orders seen when admin opens the All Orders page → clears badge to 0
   if (p === 'orders' && ORDERS.length) markOrdersSeen(ORDERS.map(o => o.dbId));
   // Load Shiprocket status when Settings opens
   if (p === 'settings') loadShiprocketStatus();
+  // Load fresh visitor analytics each time the page opens
+  if (p === 'visitorlog') buildVisitorLog();
   closeSidebar();
 }
 
@@ -5626,6 +5807,212 @@ function buildAnalytics(){
   document.getElementById("monthChart").innerHTML=MON_DATA.map(d=>`<div class="bar-col"><div class="bar-val">₹${(d.v/1000).toFixed(0)}k</div><div class="bar" style="height:${(d.v/mx)*120}px;${d.m==="Mar"?"background:linear-gradient(to top,var(--gold),var(--gold-light));":""}"></div><div class="bar-label">${d.m}</div></div>`).join("");
   document.getElementById("topProds").innerHTML=[...PRODUCTS].sort((a,b)=>b.sold-a.sold).map((p,i)=>{const cat=getCAT(p.catId);return`<div style="display:flex;align-items:center;gap:8px;margin-bottom:11px"><div style="font-family:'Cinzel',serif;font-size:11px;font-weight:800;color:var(--text-light);width:12px">${i+1}</div><div style="font-size:16px">${cat.icon}</div><div style="flex:1"><div style="font-size:11px;font-weight:700;color:var(--brown-dark)">${p.name}</div><div style="height:3px;background:var(--cream-dark);border-radius:2px;margin-top:3px"><div style="height:100%;width:${(p.sold/400)*100}%;background:linear-gradient(to right,var(--brown-dark),var(--brown-mid));border-radius:2px"></div></div></div><div style="font-size:11px;font-weight:700;color:var(--green-dark)">${p.sold}</div></div>`}).join("");
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// VISITOR ANALYTICS DASHBOARD (admin/manager)
+// ═══════════════════════════════════════════════════════════════════
+let _vlogRange = 'today';
+let _vlogGranularity = 'daily';
+let _vlogPage = 1;
+let _vlogSearchTimer = null;
+let _vlogSearchVal = '';
+
+function _vlogDateRange(){
+  const to = new Date();
+  let from = new Date();
+  if(_vlogRange==='today'){ from.setHours(0,0,0,0); }
+  else if(_vlogRange==='7d'){ from.setDate(from.getDate()-7); }
+  else if(_vlogRange==='30d'){ from.setDate(from.getDate()-30); }
+  else if(_vlogRange==='90d'){ from.setDate(from.getDate()-90); }
+  else if(_vlogRange==='all'){ from = new Date(2020,0,1); }
+  else if(_vlogRange==='custom'){
+    const f=document.getElementById('vlogFrom').value, t=document.getElementById('vlogTo').value;
+    if(f && t) return {from:f, to:t};
+  }
+  const iso = d => d.toISOString().split('T')[0];
+  return {from: iso(from), to: iso(to)};
+}
+
+function vlogSetRange(range){
+  _vlogRange = range;
+  document.querySelectorAll('.vlog-range-btn').forEach(b=>b.classList.toggle('active', b.dataset.range===range));
+  document.getElementById('vlogFrom').value = '';
+  document.getElementById('vlogTo').value = '';
+  buildVisitorLog();
+}
+
+function vlogCustomRange(){
+  const f=document.getElementById('vlogFrom').value, t=document.getElementById('vlogTo').value;
+  if(!f || !t) return;
+  _vlogRange = 'custom';
+  document.querySelectorAll('.vlog-range-btn').forEach(b=>b.classList.remove('active'));
+  buildVisitorLog();
+}
+
+function vlogSetGranularity(g){
+  _vlogGranularity = g;
+  document.querySelectorAll('.vlog-gran-btn').forEach(b=>b.classList.toggle('active', b.dataset.gran===g));
+  vlogLoadTrend();
+}
+
+function vlogDebounceSearch(){
+  clearTimeout(_vlogSearchTimer);
+  _vlogSearchTimer = setTimeout(()=>{
+    _vlogSearchVal = document.getElementById('vlogSearch').value.trim();
+    _vlogPage = 1;
+    vlogLoadVisitorTable();
+  }, 350);
+}
+
+function vlogChangePage(delta){
+  _vlogPage = Math.max(1, _vlogPage + delta);
+  vlogLoadVisitorTable();
+}
+
+function _fmtDuration(sec){
+  sec = parseInt(sec,10) || 0;
+  if(sec < 60) return sec + 's';
+  const m = Math.floor(sec/60), s = sec%60;
+  return m + 'm ' + s + 's';
+}
+
+function _deviceIcon(type){
+  return {mobile:'📱', tablet:'📟', desktop:'🖥️', other:'❓'}[type] || '❓';
+}
+
+function buildVisitorLog(){
+  const role=currentUser?.role||"customer";
+  const canView=["admin","manager"].includes(role);
+  document.getElementById("visitorlogContent").style.display=canView?"block":"none";
+  document.getElementById("visitorlogDenied").style.display=canView?"none":"block";
+  if(!canView)return;
+
+  vlogLoadSummary();
+  vlogLoadTrend();
+  vlogLoadBreakdown();
+  vlogLoadVisitorTable();
+}
+
+function vlogLoadSummary(){
+  const {from,to} = _vlogDateRange();
+  apiFetch(`/admin/analytics/summary?from=${from}&to=${to}`)
+    .then(s=>{
+      document.getElementById('vlogTotalVisitors').textContent = (s.total_visitors||0).toLocaleString();
+      document.getElementById('vlogActiveNow').innerHTML = `<span style="color:var(--green-dark)">●</span> ${s.active_now||0} active now`;
+      document.getElementById('vlogPageViews').textContent = (s.total_page_views||0).toLocaleString();
+      document.getElementById('vlogSessions').textContent = (s.total_sessions||0).toLocaleString()+' sessions';
+      document.getElementById('vlogAvgDuration').textContent = _fmtDuration(s.avg_session_sec);
+      document.getElementById('vlogBounceRate').textContent = (s.bounce_rate_pct||0)+'%';
+      document.getElementById('vlogReturning').textContent = (s.returning_visitors||0)+' returning · '+(s.new_visitors||0)+' new';
+    })
+    .catch(err=>showAdminToast('⚠️ '+err.message));
+}
+
+function vlogLoadTrend(){
+  apiFetch(`/admin/analytics/trend?granularity=${_vlogGranularity}`)
+    .then(rows=>{
+      const el = document.getElementById('vlogTrendChart');
+      if(!rows.length){ el.innerHTML = '<div style="color:var(--text-light);font-size:12px;padding:20px;text-align:center;width:100%">No traffic data yet for this period.</div>'; return; }
+      const mx = Math.max(...rows.map(r=>r.unique_visitors||0), 1);
+      el.innerHTML = rows.map(r=>{
+        const d = new Date(r.period);
+        const label = _vlogGranularity==='monthly'
+          ? d.toLocaleDateString('en-IN',{month:'short',year:'2-digit'})
+          : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short'});
+        return `<div class="bar-col" title="${r.unique_visitors} visitors · ${r.page_views} views · ${r.bounce_rate_pct}% bounce">
+          <div class="bar-val">${r.unique_visitors}</div>
+          <div class="bar" style="height:${Math.max(3,(r.unique_visitors/mx)*120)}px"></div>
+          <div class="bar-label">${label}</div>
+        </div>`;
+      }).join('');
+    })
+    .catch(err=>showAdminToast('⚠️ '+err.message));
+}
+
+function vlogLoadBreakdown(){
+  apiFetch('/admin/analytics/top-pages')
+    .then(pages=>{
+      document.getElementById('vlogTopPagesTable').innerHTML = !pages.length
+        ? '<tbody><tr><td style="padding:16px;text-align:center;color:var(--text-light)">No page view data yet.</td></tr></tbody>'
+        : `<thead><tr><th>Page</th><th>Views</th><th>Avg. Time</th></tr></thead><tbody>${
+            pages.map(p=>`<tr>
+              <td style="font-size:11px;font-family:monospace;color:var(--brown-dark)">${p.page_path}</td>
+              <td><strong>${p.view_count}</strong></td>
+              <td style="font-size:11px;color:var(--text-light)">${_fmtDuration(p.avg_time_on_page_sec)}</td>
+            </tr>`).join('')
+          }</tbody>`;
+    })
+    .catch(()=>{});
+
+  apiFetch('/admin/analytics/breakdown')
+    .then(b=>{
+      // Device breakdown — simple horizontal bars
+      const totalDev = b.devices.reduce((s,d)=>s+d.sessions,0) || 1;
+      document.getElementById('vlogDeviceBreakdown').innerHTML = b.devices.length
+        ? b.devices.map(d=>{
+            const pct = Math.round((d.sessions/totalDev)*100);
+            return `<div style="margin-bottom:12px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px">
+                <span>${_deviceIcon(d.device_type)} ${d.device_type.charAt(0).toUpperCase()+d.device_type.slice(1)}</span>
+                <strong>${pct}%</strong>
+              </div>
+              <div style="height:6px;background:var(--cream-dark);border-radius:3px"><div style="height:100%;width:${pct}%;background:linear-gradient(to right,var(--brown-dark),var(--brown-mid));border-radius:3px"></div></div>
+            </div>`;
+          }).join('')
+        : '<div style="color:var(--text-light);font-size:12px">No data yet.</div>';
+
+      // Browsers
+      document.getElementById('vlogBrowserList').innerHTML = b.browsers.length
+        ? b.browsers.map(x=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${x.browser}</span><strong>${x.sessions}</strong></div>`).join('')
+        : '<div style="color:var(--text-light);font-size:12px">No data yet.</div>';
+
+      // OS
+      document.getElementById('vlogOsList').innerHTML = b.oses.length
+        ? b.oses.map(x=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${x.os}</span><strong>${x.sessions}</strong></div>`).join('')
+        : '<div style="color:var(--text-light);font-size:12px">No data yet.</div>';
+
+      // Referrers / traffic sources
+      document.getElementById('vlogReferrerList').innerHTML = b.referrers.length
+        ? b.referrers.map(x=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)"><span>${x.source}</span><strong>${x.sessions}</strong></div>`).join('')
+        : '<div style="color:var(--text-light);font-size:12px">No data yet.</div>';
+    })
+    .catch(()=>{});
+}
+
+function vlogLoadVisitorTable(){
+  const {from,to} = _vlogDateRange();
+  const params = new URLSearchParams({
+    page: _vlogPage, pageSize: 25,
+    search: _vlogSearchVal, from, to,
+  });
+  apiFetch(`/admin/analytics/visitors?${params.toString()}`)
+    .then(res=>{
+      const tbl = document.getElementById('vlogVisitorTable');
+      if(!res.rows.length){
+        tbl.innerHTML = '<tbody><tr><td style="padding:24px;text-align:center;color:var(--text-light)">No visitors found for this filter.</td></tr></tbody>';
+        document.getElementById('vlogPageInfo').textContent = '0 results';
+        return;
+      }
+      tbl.innerHTML = `<thead><tr>
+          <th>Visit Time</th><th>Location</th><th>Device</th><th>Browser / OS</th><th>Pages</th><th>Duration</th><th>Type</th>
+        </tr></thead><tbody>${res.rows.map(v=>{
+          const dt = new Date(v.entry_at);
+          const loc = [v.city, v.country].filter(Boolean).join(', ') || 'Unknown';
+          return `<tr>
+            <td style="font-size:11px;white-space:nowrap">${dt.toLocaleDateString('en-IN')}<br><span style="color:var(--text-light)">${dt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></td>
+            <td style="font-size:11px">${loc}${v.ip_address?`<br><span style="color:var(--text-light);font-family:monospace">${v.ip_address}</span>`:''}</td>
+            <td style="font-size:12px">${_deviceIcon(v.device_type)} ${v.device_type}</td>
+            <td style="font-size:11px">${v.browser||'—'} ${v.browser_version||''}<br><span style="color:var(--text-light)">${v.os||'—'}</span></td>
+            <td><strong>${v.page_view_count}</strong></td>
+            <td style="font-size:11px">${_fmtDuration(v.session_duration_sec)}</td>
+            <td><span class="badge ${v.is_bounce?'b-cancelled':'b-delivered'}">${v.is_bounce?'Bounce':'Engaged'}</span></td>
+          </tr>`;
+        }).join('')}</tbody>`;
+      document.getElementById('vlogPageInfo').textContent = `Page ${res.page} of ${res.totalPages} · ${res.total.toLocaleString()} total visitors`;
+    })
+    .catch(err=>showAdminToast('⚠️ '+err.message));
+}
+
 
 // REPORTS
 function buildReports(){
